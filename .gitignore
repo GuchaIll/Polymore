@@ -141,6 +141,7 @@ vite.config.ts.timestamp-*
 
 # Python
 __pycache__/
+*.pyc
 *.py[cod]
 *$py.class
 *.so

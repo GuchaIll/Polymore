@@ -27,7 +27,7 @@ services:
       - "8000"
     # Frontend can talk to backend via http://backend:8000 if using server-side calls
     # OR you expose this via Caddy if your browser needs to hit the API directly:
-    # command: caddy reverse-proxy --from https://api.spotme.life --to backend:8000
+    command: caddy reverse-proxy --from https://api.spotme.life --to backend:8000
 
 volumes:
   caddy_data:
