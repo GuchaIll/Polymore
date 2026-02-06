@@ -15,13 +15,13 @@ services:
 
   # React Frontend
   frontend:
-    image: ghcr.io/tolgaozgun/polymore-frontend:latest
+    image: ghcr.io/GuchaIll/polymore-frontend:latest
     restart: always
     # No ports exposed to host; Caddy talks to this internally
 
   # FastAPI Backend
   backend:
-    image: ghcr.io/tolgaozgun/polymore-backend:latest
+    image: ghcr.io/GuchaIll/polymore-backend:latest
     restart: always
     expose:
       - "8000"
