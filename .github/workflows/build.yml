@@ -1,0 +1,42 @@
+name: PR Build check
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # 1. Test Backend Build (Dry Run)
+      - name: Build Backend Image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          push: false 
+          tags: backend-test:latest
+
+      # 2. Test Frontend Build (Dry Run)
+      - name: Build Frontend Image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend
+          push: false 
+          tags: frontend-test:latest
+
+      # 3. (Optional) Run Unit Tests
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Run Backend Tests
+        working-directory: ./backend
+        run: |
+          pip install -r requirements.txt
+          pip install pytest httpx
+          # pytest # Uncomment this when we actually have tests!!
