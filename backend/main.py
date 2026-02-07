@@ -62,10 +62,19 @@ app = FastAPI(
 # Startup event to initialize database
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database schema on application startup."""
-    logger.info("Initializing database schema...")
-    init_db()
-    logger.info("Database schema initialized")
+    """Initialize database schema on application startup if enabled."""
+    db_init_on_startup = os.getenv("DB_INIT_ON_STARTUP", "true").lower() == "true"
+    
+    if db_init_on_startup:
+        logger.info("Initializing database schema...")
+        try:
+            init_db()
+            logger.info("Database schema initialized")
+        except Exception as e:
+            logger.error(f"Database initialization failed: {e}")
+            logger.warning("Application starting without database initialization")
+    else:
+        logger.info("Database initialization skipped (DB_INIT_ON_STARTUP=false)")
 
 # CORS middleware for frontend communication
 app.add_middleware(
