@@ -24,7 +24,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     <div className="h-1.5 bg-poly-light-border dark:bg-poly-border rounded-sm mt-1 overflow-hidden">
       <div
         className={`property-fill ${type} h-full rounded-sm transition-all duration-500`}
-        style={{ width: `${value}%` }}
+        style={{ width: `${Math.min(value * 10, 100)}%` }}
       />
     </div>
   );
@@ -63,8 +63,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </div>
           {validationResult.canonicalSmiles && (
             <div className="text-xs text-poly-light-text dark:text-white font-mono break-all mb-1">
-              {validationResult.canonicalSmiles.length > 40 
-                ? validationResult.canonicalSmiles.slice(0, 40) + '...' 
+              {validationResult.canonicalSmiles.length > 40
+                ? validationResult.canonicalSmiles.slice(0, 40) + '...'
                 : validationResult.canonicalSmiles}
             </div>
           )}

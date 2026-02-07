@@ -143,6 +143,31 @@ def predict_tier_3_task(self, smiles: str):
                     raise Exception(error_msg)
                 
                 logger.info("Tier-3 prediction completed successfully")
+                
+                # SAVE TO LEADERBOARD (Tier3Analysis)
+                try:
+                    from models.tier3_analysis import Tier3Analysis
+                    db = SessionLocal()
+                    
+                    # Log the result structure for debugging
+                    logger.info(f"Tier 3 RAW RESULT: {result}")
+                    
+                    # Create analysis record
+                    # Extract result from API response. 
+                    # Assuming result structure: {"predictions": [...], "meta": ...}
+                    # We store the whole JSON in the 'result' column
+                    analysis_record = Tier3Analysis(
+                        smiles=smiles,
+                        result=result
+                    )
+                    db.add(analysis_record)
+                    db.commit()
+                    logger.info(f"Successfully saved Tier 3 analysis to leaderboard for SMILES: {smiles}")
+                    db.close()
+                except Exception as db_err:
+                    logger.error(f"Failed to save Tier 3 analysis to leaderboard: {db_err}", exc_info=True)
+                    # Don't fail the task if DB save fails, just log it
+                
                 update_task_in_db(self.request.id, "SUCCESS", result=result, progress=100, progress_message="Prediction complete")
                 
                 return result
