@@ -44,7 +44,14 @@ from core.exceptions import (
 from features.heuristics import predict_properties
 # from features.advanced_analysis import analyze_molecule_high_compute  # Moved to worker
 from schemas.analysis import AnalysisRequest, AnalysisResponse
-from schemas.task import TaskSubmissionResponse, TaskStatusResponse
+from schemas.task import (
+    TaskSubmissionResponse, 
+    TaskStatusResponse,
+    TaskListResponse,
+    TaskDetail,
+    TaskUpdateRequest,
+    TaskDeleteResponse
+)
 from worker import celery_app, analyze_molecule_task, predict_tier_3_task
 from celery.result import AsyncResult
 from database import get_db, init_db
@@ -241,6 +248,142 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
             message=f"Task status: {task_result.status}",
             data=response_data
         )
+
+@app.get("/tasks", response_model=ResponseModel[TaskListResponse])
+def list_tasks(
+    type: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """
+    List all tasks with optional filtering and pagination.
+    
+    Query Parameters:
+        - type: Filter by task type (tier-2, tier-3, etc.)
+        - status: Filter by task status (PENDING, PROGRESS, SUCCESS, FAILURE)
+        - limit: Maximum number of tasks to return (default: 50)
+        - offset: Number of tasks to skip for pagination (default: 0)
+    
+    Returns:
+        ResponseModel containing a list of tasks and pagination metadata.
+    """
+    try:
+        # Build query with optional filters
+        query = db.query(Task)
+        
+        if type:
+            query = query.filter(Task.type == type)
+        if status:
+            query = query.filter(Task.status == status)
+        
+        # Get total count before pagination
+        total = query.count()
+        
+        # Apply pagination and ordering (most recent first)
+        tasks = query.order_by(Task.created_at.desc()).limit(limit).offset(offset).all()
+        
+        # Convert to response model
+        task_details = [TaskDetail(**task.to_dict()) for task in tasks]
+        
+        return ResponseModel(
+            status=200,
+            message=f"Retrieved {len(task_details)} tasks",
+            data=TaskListResponse(
+                tasks=task_details,
+                total=total,
+                limit=limit,
+                offset=offset
+            )
+        )
+    except Exception as e:
+        logger.error(f"Failed to list tasks: {e}")
+        raise ServerException(detail=str(e))
+
+@app.patch("/tasks/{task_id}", response_model=ResponseModel[TaskDetail])
+def update_task(task_id: str, update_data: TaskUpdateRequest, db: Session = Depends(get_db)):
+    """
+    Update a task's details.
+    
+    This endpoint allows updating task status, progress, result, error message,
+    and progress message. Only provided fields will be updated.
+    
+    Args:
+        task_id: The task ID to update
+        update_data: Fields to update (all optional)
+    
+    Returns:
+        ResponseModel containing the updated task details.
+    """
+    try:
+        # Find the task
+        db_task = db.query(Task).filter(Task.task_id == task_id).first()
+        
+        if not db_task:
+            raise NotFoundException(detail=f"Task with ID {task_id} not found")
+        
+        # Update only provided fields
+        update_dict = update_data.model_dump(exclude_unset=True)
+        
+        for field, value in update_dict.items():
+            setattr(db_task, field, value)
+        
+        db.commit()
+        db.refresh(db_task)
+        
+        return ResponseModel(
+            status=200,
+            message="Task updated successfully",
+            data=TaskDetail(**db_task.to_dict())
+        )
+    except NotFoundException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update task {task_id}: {e}")
+        db.rollback()
+        raise ServerException(detail=str(e))
+
+@app.delete("/tasks/{task_id}", response_model=ResponseModel[TaskDeleteResponse])
+def delete_task(task_id: str, db: Session = Depends(get_db)):
+    """
+    Delete a task from the database.
+    
+    This performs a hard delete of the task record. Use with caution.
+    
+    Args:
+        task_id: The task ID to delete
+    
+    Returns:
+        ResponseModel containing deletion confirmation.
+    """
+    try:
+        # Find the task
+        db_task = db.query(Task).filter(Task.task_id == task_id).first()
+        
+        if not db_task:
+            raise NotFoundException(detail=f"Task with ID {task_id} not found")
+        
+        # Delete the task
+        db.delete(db_task)
+        db.commit()
+        
+        return ResponseModel(
+            status=200,
+            message="Task deleted successfully",
+            data=TaskDeleteResponse(
+                task_id=task_id,
+                deleted=True,
+                message=f"Task {task_id} has been permanently deleted"
+            )
+        )
+    except NotFoundException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete task {task_id}: {e}")
+        db.rollback()
+        raise ServerException(detail=str(e))
+
 
 @app.post("/predict/tier-3", status_code=202, response_model=ResponseModel[TaskSubmissionResponse])
 def predict_tier_3(request: Tier3Request, db: Session = Depends(get_db)):
