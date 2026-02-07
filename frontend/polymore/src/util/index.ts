@@ -1817,8 +1817,11 @@ export const predictPropertiesFromBackend = async (
     try {
         const response = await predictTier1(smiles);
         
+        console.log('Raw API response:', JSON.stringify(response, null, 2));
+        
         // Check if API returned success status (200 = success)
         if (response.status !== 200 || !response.data) {
+            console.log('API status check failed:', { status: response.status, data: response.data });
             return {
                 success: false,
                 error: response.error || response.message || 'Prediction failed'
