@@ -268,19 +268,15 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
         setCurrentSmiles(smilesForPrediction);
         showToast('Properties predicted successfully!');
       } else {
-        // Fallback to local prediction if backend fails
-        showToast(predictionResult.error || 'Backend unavailable, using local prediction');
-        const props = await predictProperties();
-        if (props) {
-          setPredictedProperties(props);
-        }
+        // Show error message - no fallback since both use same backend
+        showToast(predictionResult.error || 'Prediction failed');
       }
     } catch (error) {
       showToast(`Prediction error: ${error}`);
     } finally {
       setIsLoading(false);
     }
-  }, [rdkitReady, state.placedMolecules, predictProperties, showToast]);
+  }, [rdkitReady, state.placedMolecules, showToast]);
 
   // Manual auto-repair trigger from validation popup
   const handleAutoRepair = useCallback(async () => {
