@@ -16,7 +16,8 @@ import {
   Plus,
   ListOrdered,
   X,
-  Atom
+  Atom,
+  ArrowLeft
 } from 'lucide-react';
 import { SimulationTask, SimulationStatus } from '../../types';
 
@@ -33,6 +34,7 @@ interface SimulationPageProps {
   isPaused: boolean;
   onTogglePause: () => void;
   onAutoQueueAttempted?: (success: boolean, message: string) => void;
+  onClose?: () => void;
 }
 
 const getStatusIcon = (status: SimulationStatus) => {
@@ -41,6 +43,8 @@ const getStatusIcon = (status: SimulationStatus) => {
       return <Clock className="w-4 h-4 text-yellow-400" />;
     case 'running':
       return <Loader2 className="w-4 h-4 text-cyan-400 animate-spin" />;
+    case 'processing':
+      return <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />;
     case 'completed':
       return <CheckCircle className="w-4 h-4 text-emerald-400" />;
     case 'failed':
@@ -52,6 +56,7 @@ const getStatusLabel = (status: SimulationStatus): string => {
   switch (status) {
     case 'pending': return 'Pending';
     case 'running': return 'Running';
+    case 'processing': return 'Processing';
     case 'completed': return 'Completed';
     case 'failed': return 'Failed';
   }
@@ -509,26 +514,37 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
   onClearCompleted,
   isPaused,
   onTogglePause,
-  onAutoQueueAttempted
+  onAutoQueueAttempted,
+  onClose
 }) => {
   const [addError, setAddError] = useState<string | null>(null);
-  const [autoQueueDone, setAutoQueueDone] = useState(false);
+  const autoQueueRef = useRef<string | null>(null);
+  const isProcessingRef = useRef(false);
 
-  // Auto-queue when page opens
+  // Auto-queue when page opens - use refs to prevent duplicate queuing
   useEffect(() => {
-    if (isOpen && !autoQueueDone && currentSmiles) {
+    if (isOpen && currentSmiles && autoQueueRef.current !== currentSmiles && !isProcessingRef.current) {
+      // Set refs BEFORE async operation to prevent race condition
+      isProcessingRef.current = true;
+      autoQueueRef.current = currentSmiles;
+      
       const success = onAddToQueue(currentSmiles, currentName || 'Unnamed Polymer');
-      setAutoQueueDone(true);
       
       if (onAutoQueueAttempted) {
         onAutoQueueAttempted(success, success ? 'Added to simulation queue' : 'Already in queue or running');
       }
+      
+      // Reset processing flag after a short delay
+      setTimeout(() => {
+        isProcessingRef.current = false;
+      }, 100);
     }
-  }, [isOpen, currentSmiles, currentName, autoQueueDone, onAddToQueue, onAutoQueueAttempted]);
+  }, [isOpen, currentSmiles, currentName, onAddToQueue, onAutoQueueAttempted]);
 
   useEffect(() => {
     if (!isOpen) {
-      setAutoQueueDone(false);
+      autoQueueRef.current = null;
+      isProcessingRef.current = false;
       setAddError(null);
     }
   }, [isOpen]);
@@ -561,6 +577,15 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 transition-colors"
+                title="Back to Editor"
+              >
+                <ArrowLeft className="w-5 h-5 text-white" />
+              </button>
+            )}
             <div className="p-3 bg-white/10 rounded-xl border border-white/20">
               <Atom className="w-8 h-8 text-white" />
             </div>
