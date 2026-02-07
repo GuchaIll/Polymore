@@ -54,7 +54,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
-          source: "docker-compose.yml,Caddyfile"
+          source: "docker-compose.prod.yml,Caddyfile"
           target: "~/app/"
 
       # SSH and Restart
@@ -68,15 +68,27 @@ jobs:
             # Navigate to app folder
             cd ~/app
             
+            # Create .env file with secrets
+            cat > .env << EOF
+            DB_USER=${{ secrets.DB_USER }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            DB_NAME=${{ secrets.DB_NAME }}
+            SERVERLESS_GPU_URL=${{ secrets.SERVERLESS_GPU_URL }}
+            EOF
+            
             # Login to registry
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
             # Pull new images
-            docker compose -f docker-compose.yml pull
+            docker compose -f docker-compose.prod.yml pull
             
             # Stop old containers to free ports
-            docker compose -f docker-compose.yml down || true
+            docker compose -f docker-compose.prod.yml down || true
             
             # Restart services (detached)
             # This smart-restarts only changed containers
-            docker compose -f docker-compose.yml up -d
+            docker compose -f docker-compose.prod.yml up -d
+            
+            # Clean up .env file (optional security measure)
+            # Comment out if you want to persist environment variables
+            # rm .env

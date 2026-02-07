@@ -1,3 +1,7 @@
+# Production Docker Compose Configuration
+# This file is used in production environments (VPS)
+# Environment variables are provided via GitHub Secrets during deployment
+
 services:
   # The Reverse Proxy (Handles SSL & Domain automatically)
   caddy:
@@ -24,13 +28,13 @@ services:
     expose:
       - "5432"
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=polymore_db
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d polymore_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -46,13 +50,11 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
-    env_file:
-      - ./backend/.env
     environment:
-      # Override with docker-compose specific values
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/polymore_db
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - SERVERLESS_GPU_URL=${SERVERLESS_GPU_URL}
     # Default command from Dockerfile will run
 
   # Redis for Task Queue
@@ -74,13 +76,11 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
-    env_file:
-      - ./backend/.env
     environment:
-      # Override with docker-compose specific values
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/polymore_db
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - SERVERLESS_GPU_URL=${SERVERLESS_GPU_URL}
 
 volumes:
   caddy_data:
