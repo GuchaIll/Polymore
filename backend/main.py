@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any, Optional
 import os
+import uuid
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -159,17 +160,21 @@ def analyze_high_compute(request: AnalysisRequest, db: Session = Depends(get_db)
         ResponseModel containing the task_id and submission status.
     """
     try:
-        task = analyze_molecule_task.delay(request.smiles)
+        # Generate task ID upfront to avoid race condition
+        task_id = str(uuid.uuid4())
         
-        # Create task record in database
+        # Create task record in database BEFORE enqueueing
         db_task = Task(
-            task_id=task.id,
+            task_id=task_id,
             type="tier-2",
             status="PENDING",
             input_data={"smiles": request.smiles}
         )
         db.add(db_task)
         db.commit()
+        
+        # Now enqueue the task with the pre-generated task_id
+        task = analyze_molecule_task.apply_async(args=[request.smiles], task_id=task_id)
         
         return ResponseModel(
             status=202,
@@ -266,17 +271,21 @@ def predict_tier_3(request: Tier3Request, db: Session = Depends(get_db)):
         ResponseModel containing the task_id and submission status.
     """
     try:
-        task = predict_tier_3_task.delay(request.smiles)
+        # Generate task ID upfront to avoid race condition
+        task_id = str(uuid.uuid4())
         
-        # Create task record in database
+        # Create task record in database BEFORE enqueueing
         db_task = Task(
-            task_id=task.id,
+            task_id=task_id,
             type="tier-3",
             status="PENDING",
             input_data={"smiles": request.smiles}
         )
         db.add(db_task)
         db.commit()
+        
+        # Now enqueue the task with the pre-generated task_id
+        task = predict_tier_3_task.apply_async(args=[request.smiles], task_id=task_id)
         
         return ResponseModel(
             status=202,
