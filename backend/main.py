@@ -26,7 +26,6 @@ from schemas.molecule import (
 )
 from schemas.tier3 import (
     Tier3Request,
-    Tier3PredictionResponse,
 )
 from schemas.polymer import (
     HeuristicPredictedProperties,
