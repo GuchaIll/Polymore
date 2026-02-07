@@ -890,7 +890,8 @@ def train_models(
         target_names_to_model_config_paths: dict[str, str], 
         target_names_to_extra_data_config_paths: dict[str, str],
         fold_count: int = 5, 
-        data_path: str = 'data/from_host/train.csv'):
+        data_path: str = 'data/from_host/train.csv',
+        target_name_override: str = None):
     # CREATE OUTPUT DIRECTORY.
     # CREATE OUTPUT DIRECTORY.
     if os.environ.get('MODAL_IS_RUNNING'):
@@ -906,6 +907,14 @@ def train_models(
     # TRAIN & TEST MODELS
     maes = []
     target_names = list(target_names_to_model_config_paths.keys())
+    
+    # Filter targets if override
+    if target_name_override:
+        if target_name_override not in target_names:
+            print(f"Target {target_name_override} not found in config.")
+            return
+        target_names = [target_name_override]
+
     for target_index, target_name in enumerate(target_names):
         # LOAD MODEL CONFIG.
         with open(target_names_to_model_config_paths[target_name], 'r') as model_config_file:
@@ -1024,9 +1033,10 @@ def train_models(
         print(f"{target_name}: MAE = {mae:.5f}")
 
     # LOG wMAE.
-    class_weights = get_target_weights(data_path, target_names)
-    weighted_mae = np.average(maes, weights=class_weights)
-    print(f"Weighted average MAE: {weighted_mae:.5f}")
+    if target_name_override is None:
+        class_weights = get_target_weights(data_path, target_names)
+        weighted_mae = np.average(maes, weights=class_weights)
+        print(f"Weighted average MAE: {weighted_mae:.5f}")
 
 
 def get_optimal_model_config(model_class, target_name, trial_count, extra_data_config_path, data_path='data/from_host_v2/train.csv'):
@@ -1359,6 +1369,11 @@ def get_optimal_data_config(target_name, model_class, model_config_path, trial_c
         json.dump(study.best_params, output_file, indent=4)
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--target', type=str, help='Target property name')
+    args = parser.parse_args()
+
     train_models(
         fold_count=1,
         model_class=TabularPredictor,
@@ -1375,5 +1390,6 @@ if __name__ == '__main__':
             'Tc': 'configs/TabularPredictor_data_Tc_249.json',
             'Density': 'configs/TabularPredictor_data_Density_255.json',
             'Rg': 'configs/TabularPredictor_data_Rg_14477.json',
-        }
+        },
+        target_name_override=args.target
     )

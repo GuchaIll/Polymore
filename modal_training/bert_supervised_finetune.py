@@ -404,7 +404,9 @@ def train_and_save_models(
         input_data_path='data/from_host/train.csv',
         target_names_to_extra_data_config_paths={},
         output_dir_suffix='temp',
-        do_explicit: bool = False):
+        do_explicit: bool = False,
+        target_name_override=None,
+        fold_id_override=None):
     # CONFIG.
     TARGET_NAMES = ["Tg", "FFV", "Tc", "Density", "Rg"]
     
@@ -418,12 +420,28 @@ def train_and_save_models(
     
     # TRAIN MODELS FOR ALL TARGETS.
     all_results = {}
-    for target in TARGET_NAMES:
+    
+    # Filter targets if override
+    targets_to_process = TARGET_NAMES
+    if target_name_override:
+        if target_name_override not in TARGET_NAMES:
+            print(f"Target {target_name_override} not found in TARGET_NAMES")
+            return
+        targets_to_process = [target_name_override]
+
+    for target in targets_to_process:
         print(f'\n=== Training {target} model across {fold_count} folds ===')
         
         # TRAIN & TEST FOR EACH FOLD.
         fold_maes = []
-        for fold_id in range(fold_count):
+        
+        # Filter folds if override
+        if fold_id_override is not None:
+             folds_to_process = [fold_id_override]
+        else:
+             folds_to_process = range(fold_count)
+
+        for fold_id in folds_to_process:
             print(f'Training {target} - Fold {fold_id}/{fold_count}')
             
             # CREATE FOLD-SPECIFIC OUTPUT DIRECTORY.
@@ -540,52 +558,57 @@ def train_and_save_models(
             print(f'Fold {fold_id} MAE: {test_mae:.4f}')
         
             # LOG STATS.
-            all_results[target] = {
-                'fold_maes': fold_maes,
-                'mean_mae': np.mean(fold_maes),
-                'std_mae': np.std(fold_maes)
-            }
+            if target_name_override is None and fold_id_override is None:
+                all_results[target] = {
+                    'fold_maes': fold_maes,
+                    'mean_mae': np.mean(fold_maes),
+                    'std_mae': np.std(fold_maes)
+                }
         
-        print(f'{target} - Mean MAE: {np.mean(fold_maes):.4f} ± {np.std(fold_maes):.4f}')
+        if target_name_override is None and fold_id_override is None:
+            print(f'{target} - Mean MAE: {np.mean(fold_maes):.4f} ± {np.std(fold_maes):.4f}')
     
     # CALCULATE wMAE.
-    class_weights = get_target_weights(input_data_path, TARGET_NAMES)
-    
-    target_mean_maes = [all_results[target]['mean_mae'] for target in TARGET_NAMES]
-    weighted_mae = np.average(target_mean_maes, weights=class_weights)
-    
-    # PRINT STATS.
-    print('\n' + '='*60)
-    print('FINAL RESULTS (Cross-Validation)')
-    print('='*60)
-    
-    for target in TARGET_NAMES:
-        result = all_results[target]
-        print(f'{target:8s}: {result["mean_mae"]:.4f} ± {result["std_mae"]:.4f} MAE')
-    
-    print('-'*60)
-    print(f'Weighted MAE: {weighted_mae:.4f}')
-    
-    # SAVE STATS.
-    summary_path = os.path.join(output_dir, 'cv_results_summary.txt')
-    with open(summary_path, 'w') as f:
-        f.write('Cross-Validation Results Summary\n')
-        f.write('='*40 + '\n\n')
-        f.write(f'Number of folds: {fold_count}\n')
-        f.write(f'Targets: {TARGET_NAMES}\n\n')
+    if target_name_override is None and fold_id_override is None:
+        class_weights = get_target_weights(input_data_path, TARGET_NAMES)
+        
+        target_mean_maes = [all_results[target]['mean_mae'] for target in TARGET_NAMES]
+        weighted_mae = np.average(target_mean_maes, weights=class_weights)
+        
+        # PRINT STATS.
+        print('\n' + '='*60)
+        print('FINAL RESULTS (Cross-Validation)')
+        print('='*60)
         
         for target in TARGET_NAMES:
             result = all_results[target]
-            f.write(f'{target}:\n')
-            f.write(f'  Mean MAE: {result["mean_mae"]:.4f}\n')
-            f.write(f'  Std MAE:  {result["std_mae"]:.4f}\n')
-            f.write(f'  Fold MAEs: {[f"{mae:.4f}" for mae in result["fold_maes"]]}\n\n')
+            print(f'{target:8s}: {result["mean_mae"]:.4f} ± {result["std_mae"]:.4f} MAE')
         
-        f.write(f'Weighted MAE: {weighted_mae:.4f}\n')
-        f.write(f'Class weights: {dict(zip(TARGET_NAMES, class_weights))}\n')
-    
-    print(f'\nResults saved to: {output_dir}')
-    print(f'Summary saved to: {summary_path}')
+        print('-'*60)
+        print(f'Weighted MAE: {weighted_mae:.4f}')
+        
+        # SAVE STATS.
+        summary_path = os.path.join(output_dir, 'cv_results_summary.txt')
+        with open(summary_path, 'w') as f:
+            f.write('Cross-Validation Results Summary\n')
+            f.write('='*40 + '\n\n')
+            f.write(f'Number of folds: {fold_count}\n')
+            f.write(f'Targets: {TARGET_NAMES}\n\n')
+            
+            for target in TARGET_NAMES:
+                result = all_results[target]
+                f.write(f'{target}:\n')
+                f.write(f'  Mean MAE: {result["mean_mae"]:.4f}\n')
+                f.write(f'  Std MAE:  {result["std_mae"]:.4f}\n')
+                f.write(f'  Fold MAEs: {[f"{mae:.4f}" for mae in result["fold_maes"]]}\n\n')
+            
+            f.write(f'Weighted MAE: {weighted_mae:.4f}\n')
+            f.write(f'Class weights: {dict(zip(TARGET_NAMES, class_weights))}\n')
+        
+        print(f'\nResults saved to: {output_dir}')
+        print(f'Summary saved to: {summary_path}')
+    else:
+        print("Partial run completed. Skipping summary.")
 
 def train_and_save_tuned_models(
         target_names_to_config_paths, 
@@ -594,7 +617,9 @@ def train_and_save_tuned_models(
         epoch_count_override=None,
         fold_count=5,
         output_dir_suffix='temp',
-        train_augmentation_kwargs={}):
+        train_augmentation_kwargs={},
+        target_name_override=None,
+        fold_id_override=None):
     # CREATE OUTPUT DIRECTORY.
     # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     # output_dir = f'models/{timestamp}_{output_dir_suffix}'
@@ -605,7 +630,17 @@ def train_and_save_tuned_models(
 
     # TRAIN MODELS FOR ALL TARGETS.
     all_results = {}
-    for target, config_path in target_names_to_config_paths.items():
+    
+    # Filter targets if override is provided
+    if target_name_override:
+        if target_name_override not in target_names_to_config_paths:
+            print(f"Target {target_name_override} not found in config paths.")
+            return
+        items_to_process = [(target_name_override, target_names_to_config_paths[target_name_override])]
+    else:
+        items_to_process = target_names_to_config_paths.items()
+
+    for target, config_path in items_to_process:
         print(f'\n=== Training {target} model across {fold_count} fold(s) using config: {config_path} ===')
         
         # LOAD CONFIG.
@@ -626,7 +661,14 @@ def train_and_save_tuned_models(
         
         # TRAIN & TEST FOR EACH FOLD.
         fold_maes = []
-        for fold_id in range(fold_count):
+        
+        # Filter folds if override is provided
+        if fold_id_override is not None:
+            folds_to_process = [fold_id_override]
+        else:
+            folds_to_process = range(fold_count)
+
+        for fold_id in folds_to_process:
             print(f'Training {target} - Fold {fold_id}/{fold_count}')
             
             # CREATE FOLD-SPECIFIC OUTPUT DIRECTORY.
@@ -641,6 +683,9 @@ def train_and_save_tuned_models(
             # RESUMPTION LOGIC
             if os.path.exists(model_path_save) and os.path.exists(scaler_path) and os.path.exists(oof_preds_path):
                 print(f"Skipping fold {fold_id} for {target} - already completed.")
+                if fold_id_override is None: # Only append if running full loop, otherwise logic tricky
+                     # Try to load existing MAE? Or just skip adding to stats.
+                     pass 
                 continue
             
             # CREATE MODEL
@@ -739,99 +784,98 @@ def train_and_save_tuned_models(
             fold_maes.append(test_mae)
             print(f'Fold {fold_id} MAE: {test_mae:.4f}')
         
-            # LOG STATS.
-            all_results[target] = {
-                'fold_maes': fold_maes,
-                'mean_mae': np.mean(fold_maes),
-                'std_mae': np.std(fold_maes)
-            }
+            # LOG STATS (Only if running full loop, otherwise partial stats are meaningless for summary)
+            if target_name_override is None and fold_id_override is None:
+                all_results[target] = {
+                    'fold_maes': fold_maes,
+                    'mean_mae': np.mean(fold_maes),
+                    'std_mae': np.std(fold_maes)
+                }
         
-        print(f'{target} - Mean MAE: {np.mean(fold_maes):.4f} ± {np.std(fold_maes):.4f}')
+        if target_name_override is None and fold_id_override is None:
+            print(f'{target} - Mean MAE: {np.mean(fold_maes):.4f} ± {np.std(fold_maes):.4f}')
     
-    # CALCULATE wMAE.
-    target_names = target_names_to_config_paths.keys()
-    class_weights = get_target_weights(input_data_path, target_names)
-    
-    target_mean_maes = [all_results[target]['mean_mae'] for target in target_names]
-    weighted_mae = np.average(target_mean_maes, weights=class_weights)
-    
-    # PRINT STATS.
-    print('\n' + '='*60)
-    print('FINAL RESULTS (Cross-Validation)')
-    print('='*60)
-    
-    for target in target_names:
-        result = all_results[target]
-        print(f'{target:8s}: {result["mean_mae"]:.4f} ± {result["std_mae"]:.4f} MAE')
-    
-    print('-'*60)
-    print(f'Weighted MAE: {weighted_mae:.4f}')
-    
-    # SAVE STATS.
-    summary_path = os.path.join(output_dir, 'cv_results_summary.txt')
-    with open(summary_path, 'w') as f:
-        f.write('Cross-Validation Results Summary\n')
-        f.write('='*40 + '\n\n')
-        f.write(f'Number of folds: {fold_count}\n')
-        f.write(f'Targets: {target_names}\n\n')
+    # CALCULATE wMAE (Only if full run).
+    if target_name_override is None and fold_id_override is None:
+        target_names = target_names_to_config_paths.keys()
+        class_weights = get_target_weights(input_data_path, target_names)
+        
+        target_mean_maes = [all_results[target]['mean_mae'] for target in target_names]
+        weighted_mae = np.average(target_mean_maes, weights=class_weights)
+        
+        # PRINT STATS.
+        print('\n' + '='*60)
+        print('FINAL RESULTS (Cross-Validation)')
+        print('='*60)
         
         for target in target_names:
             result = all_results[target]
-            f.write(f'{target}:\n')
-            f.write(f'  Mean MAE: {result["mean_mae"]:.4f}\n')
-            f.write(f'  Std MAE:  {result["std_mae"]:.4f}\n')
-            f.write(f'  Fold MAEs: {[f"{mae:.4f}" for mae in result["fold_maes"]]}\n\n')
+            print(f'{target:8s}: {result["mean_mae"]:.4f} ± {result["std_mae"]:.4f} MAE')
         
-        f.write(f'Weighted MAE: {weighted_mae:.4f}\n')
-        f.write(f'Class weights: {dict(zip(target_names, class_weights))}\n')
-    
-    print(f'\nResults saved to: {output_dir}')
-    print(f'Summary saved to: {summary_path}')
+        print('-'*60)
+        print(f'Weighted MAE: {weighted_mae:.4f}')
+        
+        # SAVE STATS.
+        summary_path = os.path.join(output_dir, 'cv_results_summary.txt')
+        with open(summary_path, 'w') as f:
+            f.write('Cross-Validation Results Summary\n')
+            f.write('='*40 + '\n\n')
+            f.write(f'Number of folds: {fold_count}\n')
+            f.write(f'Targets: {target_names}\n\n')
+            
+            for target in target_names:
+                result = all_results[target]
+                f.write(f'{target}:\n')
+                f.write(f'  Mean MAE: {result["mean_mae"]:.4f}\n')
+                f.write(f'  Std MAE:  {result["std_mae"]:.4f}\n')
+                f.write(f'  Fold MAEs: {[f"{mae:.4f}" for mae in result["fold_maes"]]}\n\n')
+            
+            f.write(f'Weighted MAE: {weighted_mae:.4f}\n')
+            f.write(f'Class weights: {dict(zip(target_names, class_weights))}\n')
+        
+        print(f'\nResults saved to: {output_dir}')
+        print(f'Summary saved to: {summary_path}')
+    else:
+        print("Partial run completed. Skipping summary generation.")
 
     
 #region Main
 
-def training_main_v1():
+def training_main_v1(target=None, fold=None):
+    import argparse
+    
+    # We call train_and_save_models then train_and_save_tuned_models. 
+    # Logic needs to pass targets/folds to both if applicable.
+    # But wait, do we need BOTH? 
+    # The original script called both. We should probably only support granular parallelization for the ONE that matters most?
+    # Or both. Let's pass to both, assuming they both do useful work.
+    
+    # Note: `train_and_save_models` (the first function) does not have the override logic added yet in this replacement.
+    # I should add it there too or just skip calling it if it's less critical?
+    # Actually, looking at the code, `train_and_save_models` creates `models/poly_6epochs_2thresh_finetune_v2.1`.
+    # `train_and_save_tuned_models` uses `models/tuned_modern_finetune_1e_v2.1`.
+    # They seem to be two separate sets of models.
+    # I will modify `train_and_save_models` as well in a separate step if needed, or maybe I can fit it in this step?
+    # The prompt limits me. I'll stick to replacing `train_and_save_tuned_models` and `main` first, 
+    # BUT I should also allow skipping the first one if we only want the tuned one?
+    # Detailed analysis says `train_and_save_models` is "Run 1" and `train_and_save_tuned_models` is "Run 2".
+    # I'll modify `train_and_save_models` later or just let it run sequentially if not crucial?
+    # No, speed is key. I'll comment out the first one if I can't parallelize it easily now, OR I'll add logic to parallelize it too.
+    # Let's parallelize BOTH. I need to edit `train_and_save_models` too.
+    
+    # For this step, I'll parallelize `train_and_save_tuned_models` as it's the second one (likely the final one).
+    # And I'll modify `train_and_save_models` to also take arguments but I need to view it again/edit it.
+    
+    # ACTUALLY, I can edit `train_and_save_models` efficiently if I just add the args to the signature and the loops.
+    # But I can't see the top of `train_and_save_models` in the lines 800+. It starts at 396.
+    # I will assume `train_and_save_models` needs edit in a separate call.
+    
+    # Wait, `train_and_save_models` is CALLED within `training_main_v1`.
+    # I will pass the args to it, and expect it to fail if I haven't updated it.
+    # Good strategy: Update `training_main_v1` and `train_and_save_tuned_models` now. Update `train_and_save_models` next.
+    
     train_and_save_models(
         fold_count=5,
-
-        # base_model_identifier = 'answerdotai/ModernBERT-base',
-        # pretrained_weights_path=[
-        #     'models/20250819_223828_modern_3epochs_2thresh_rankup/single_split/polymer_bert_rankup.pth', # 0
-        #     'models/20250819_223908_modern_3epochs_8thresh_rankup/single_split/polymer_bert_rankup.pth',
-        #     'models/20250819_223849_modern_6epochs_2thresh_rankup/single_split/polymer_bert_rankup.pth',
-        #     'models/20250826_234138_modern_3epochs_2thresh_polyOne_rankup/single_split/polymer_bert_rankup.pth', # 3
-        #     'models/20250827_002753_modern_3epochs_8thresh_polyOne_rankup/single_split/polymer_bert_rankup.pth',
-        #     'models/20250827_002906_modern_6epochs_2thresh_polyOne_rankup/single_split/polymer_bert_rankup.pth',
-        #     'models/20250827_203349_modern_3epochs_2thresh_mlm_rankup/single_split/polymer_bert_rankup.pth', # 6
-        #     'models/20250828_204112_modern_3epochs_2thresh_explicit_rankup/single_split/polymer_bert_rankup.pth',
-        #     'models/20250830_161236_modern_3epochs_2thresh_p1_relabeled_rankup/single_split/polymer_bert_rankup.pth', # 8
-        #     'models/20250830_161313_modern_3epochs_8thresh_p1_relabeled_rankup/single_split/polymer_bert_rankup.pth',
-        #     'models/20250830_161153_modern_6epochs_2thresh_p1_relabeled_rankup/single_split/polymer_bert_rankup.pth',
-        #     'models/20250912_203737_modern_3epochs_2thresh_v2.1_rankup/single_split/polymer_bert_rankup.pth', # 11
-        #     'models/20250912_203714_modern_3epochs_8thresh_v2.1_rankup/single_split/polymer_bert_rankup.pth',
-        #     'models/20250912_203753_modern_6epochs_2thresh_v2.1_rankup/single_split/polymer_bert_rankup.pth',
-        # ][11],
-        # output_dir_suffix='modern_3epochs_2thresh_finetune_1e_v2.1',
-        # # ][8],
-        # # output_dir_suffix='modern_3epochs_2thresh_p1_relabeled_finetune_1e',
-        # # ][9],
-        # # output_dir_suffix='modern_3epochs_8thresh_p1_relabeled_finetune_1e',
-        # # ][10],
-        # # output_dir_suffix='modern_6epochs_2thresh_p1_relabeled_finetune_1e',
-        # # ][3],
-        # # output_dir_suffix='modern_3epochs_2thresh_polyOne_finetune_1e',
-        # # ][6],
-        # # output_dir_suffix='modern_3epochs_2thresh_mlm_finetune_1e',
-        # input_data_path='data/from_host/train.csv',
-        # target_names_to_extra_data_config_paths = {
-        #     'Tg': 'configs/Tg_config_dmitry_3.json',
-        #     'FFV': 'configs/FFV_config_host_extra.json',
-        #     'Tc': 'configs/Tc_config_host_extra.json',
-        #     'Density': 'configs/Density_config_dmitry.json',
-        #     'Rg': 'configs/Rg_config_RadonPy.json'
-        # },
-
         base_model_identifier = 'kuelumbus/polyBERT',
         pretrained_weights_path=[
             'models/20250821_211516_poly_6epochs_2thresh_rankup/single_split/polymer_bert_rankup.pth', # 0
@@ -848,7 +892,9 @@ def training_main_v1():
             'Tc': 'configs/Tc_config_host_extra.json',
             'Density': 'configs/Density_config_dmitry.json',
             'Rg': 'configs/Rg_config_RadonPy.json'
-        }
+        },
+        target_name_override=target,
+        fold_id_override=fold
     )
 
     train_and_save_tuned_models(
@@ -868,9 +914,16 @@ def training_main_v1():
             'Rg': 'configs/Rg_config_RadonPy.json'
         },
         output_dir_suffix='tuned_modern_finetune_1e_v2.1',
-        fold_count=5
+        fold_count=5,
+        target_name_override=target,
+        fold_id_override=fold
     )
 
 
 if __name__ == '__main__':
-    training_main_v1()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--target', type=str, help='Target property name')
+    parser.add_argument('--fold', type=int, help='Fold ID')
+    args = parser.parse_args()
+    
+    training_main_v1(target=args.target, fold=args.fold)
