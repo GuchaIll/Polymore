@@ -118,7 +118,7 @@ def read_health():
         data={"status": "ok"}
     )
 
-@app.post("/api/predict", response_model=ResponseModel[HeuristicPredictedProperties])
+@app.post("/predict/tier-1", response_model=ResponseModel[HeuristicPredictedProperties])
 def predict_heuristics(request: SmiRequest):
     """Predict polymer properties from SMILES using heuristics."""
     try:
@@ -132,7 +132,7 @@ def predict_heuristics(request: SmiRequest):
         logger.error(f"Prediction failed for SMILES {request.smiles}: {e}")
         raise ServerException(detail=str(e))
 
-@app.post("/api/analyze/high-compute", status_code=202, response_model=ResponseModel[TaskSubmissionResponse])
+@app.post("/predict/tier-2", status_code=202, response_model=ResponseModel[TaskSubmissionResponse])
 def analyze_high_compute(request: AnalysisRequest):
     """
     Submit a high-compute analysis task to the Celery queue.
@@ -158,7 +158,7 @@ def analyze_high_compute(request: AnalysisRequest):
         logger.error(f"Failed to submit analysis task: {e}")
         raise ServerException(detail=str(e))
 
-@app.get("/api/tasks/{task_id}", response_model=ResponseModel[TaskStatusResponse])
+@app.get("/tasks/{task_id}", response_model=ResponseModel[TaskStatusResponse])
 def get_task_status(task_id: str):
     """
     Retrieve the status and result of a background task.
@@ -194,7 +194,7 @@ def get_task_status(task_id: str):
         data=response_data
     )
 
-@app.post("/api/validate-smiles", response_model=ResponseModel[SmilesValidationResponse])
+@app.post("/validate-smiles", response_model=ResponseModel[SmilesValidationResponse])
 def validate_smiles(request: SmilesValidationRequest):
     """
     Validate a single SMILES string using RDKit.
@@ -229,7 +229,7 @@ def validate_smiles(request: SmilesValidationRequest):
         )
     )
 
-@app.post("/api/validate-polymer", response_model=ResponseModel[ValidationResponse])
+@app.post("/validate-polymer", response_model=ResponseModel[ValidationResponse])
 def validate_polymer(request: ValidatePolymerRequest):
     """
     Validate a polymer configuration from placed molecules.
