@@ -42,7 +42,7 @@ jobs:
       - name: Build and Push Frontend
         uses: docker/build-push-action@v4
         with:
-          context: ./frontend
+          context: ./frontend/polymore
           push: true  
           # And here
           tags: ghcr.io/${{ env.OWNER_LC }}/polymore-frontend:latest
