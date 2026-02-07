@@ -29,7 +29,7 @@ const initialState: PolyForgeState = {
 export function usePolyForgeState() {
   const [state, setState] = useState<PolyForgeState>(initialState);
   const [toast, setToast] = useState<Toast>({ message: '', visible: false });
-  const { analyze: analyzeTierOne, loading: tierOneLoading } = useTierOneAnalysis();
+  const tierOneAnalysis = useTierOneAnalysis();
 
   const showToast = useCallback((message: string) => {
     setToast({ message, visible: true });
@@ -428,7 +428,7 @@ export function usePolyForgeState() {
 
     try {
       // Call backend API via useTierOneAnalysis hook
-      const result = await analyzeTierOne(smiles);
+      const result = await tierOneAnalysis.analyze(smiles);
       
       if (result) {
         // Normalize values: if > 1 use as-is, otherwise multiply by 100
@@ -455,7 +455,7 @@ export function usePolyForgeState() {
       showToast(error.message || 'Prediction failed');
       return null;
     }
-  }, [state.placedMolecules, showToast, analyzeTierOne]);
+  }, [state.placedMolecules, showToast, tierOneAnalysis]);
 
   return {
     state,
