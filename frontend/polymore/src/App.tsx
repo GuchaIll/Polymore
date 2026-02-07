@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import PolyForge from './pages/PolyForge';
+import Leaderboard from './pages/Leaderboard';
 import { initRDKit } from './util';
 
 /**
@@ -27,6 +28,7 @@ const App: React.FC = () => {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<PolyForge rdkitReady={rdkitReady} rdkitError={rdkitError} />} />
+        <Route path="/leaderboard" element={<Leaderboard />} />
       </Routes>
     </BrowserRouter>
   );

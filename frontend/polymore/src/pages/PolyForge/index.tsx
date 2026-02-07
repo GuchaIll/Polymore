@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as THREE from 'three';
 import Sidebar from '../../components/Sidebar';
 import Toolbar from '../../components/Toolbar';
@@ -10,7 +11,7 @@ import ResultsPage from '../ResultsPage';
 import { usePolyForgeState } from '../../hooks/usePolyForgeState';
 import { useTheme } from '../../hooks/useTheme';
 import { Molecule, PredictedProperties, SimulationTask, SimulationResult } from '../../types';
-import { 
+import {
   validatePolymerComprehensive,
   predictPropertiesFromBackend,
   parseSmilestoMolecules,
@@ -66,6 +67,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
   const [repairResult, setRepairResult] = useState<SmilesRepairResult | null>(null);
   const [isRepairing, setIsRepairing] = useState(false);
   const { isDark, toggleTheme } = useTheme();
+  const navigate = useNavigate();
 
   // Simulation Queue State
   const [simulationPageOpen, setSimulationPageOpen] = useState(false);
@@ -96,7 +98,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
       confirmMove();
       return;
     }
-    
+
     // Otherwise, place a new molecule in add mode
     if (state.tool === 'add' && state.selectedMolecule) {
       placeMolecule(state.selectedMolecule, {
@@ -155,7 +157,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
       showToast('Chemistry engine loading...');
       return;
     }
-    
+
     if (state.placedMolecules.length === 0) {
       showToast('No molecules to validate');
       return;
@@ -163,11 +165,11 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
 
     setIsLoading(true);
     setRepairResult(null); // Clear previous repair results
-    
+
     try {
       const result = await validatePolymerComprehensive(state.placedMolecules);
       setValidationResult(result);
-      
+
       if (result.isValid) {
         showToast(`Valid ${result.polymerType} polymer: ${result.canonicalSmiles}`);
       } else {
@@ -177,7 +179,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
           if (smiles) {
             const repair = await repairSmiles(smiles);
             setRepairResult(repair);
-            
+
             if (repair.success && repair.wasModified) {
               showToast('Auto-repair found fixes - see suggestions');
             }
@@ -185,7 +187,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
         } catch {
           // Repair failed silently, still show validation popup
         }
-        
+
         // Show popup with detailed errors
         setShowValidationPopup(true);
       }
@@ -209,12 +211,12 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
 
     setIsLoading(true);
     setRepairResult(null); // Clear previous repair results
-    
+
     try {
       // Comprehensive validation first
       const result = await validatePolymerComprehensive(state.placedMolecules);
       setValidationResult(result);
-      
+
       if (!result.isValid) {
         // Auto-trigger repair attempt when validation fails
         try {
@@ -222,7 +224,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
           if (smiles) {
             const repair = await repairSmiles(smiles);
             setRepairResult(repair);
-            
+
             if (repair.success && repair.wasModified) {
               showToast('Auto-repair found fixes - see suggestions');
             }
@@ -230,38 +232,38 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
         } catch {
           // Repair failed silently
         }
-        
+
         // Show popup with validation errors
         setShowValidationPopup(true);
         return;
       }
-      
+
       // Use canonical SMILES for prediction
       const smilesForPrediction = result.canonicalSmiles || result.smiles;
-      
+
       if (!smilesForPrediction) {
         showToast('Could not generate SMILES for prediction');
         return;
       }
-      
+
       // Call backend API for property prediction
       showToast('Predicting properties...');
       const predictionResult = await predictPropertiesFromBackend(smilesForPrediction);
-      
+
       console.log('Prediction result:', JSON.stringify(predictionResult, null, 2));
-      
+
       if (predictionResult.success && predictionResult.properties) {
         // Map backend properties to our PredictedProperties format
         // Backend returns values in 0-10 scale, we need 0-100 for display
         const p = predictionResult.properties;
         console.log('Properties from backend:', p);
-        
+
         const normalize = (val: number | undefined, fallback: number) => {
           if (val === undefined || val === null) return fallback;
           // Backend returns 0-10 scale, multiply by 10 to get 0-100
           return val * 10;
         };
-        
+
         const props: PredictedProperties = {
           strength: normalize(p.strength, 80),
           flexibility: normalize(p.flexibility, 60),
@@ -287,14 +289,14 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
   // Manual auto-repair trigger from validation popup
   const handleAutoRepair = useCallback(async () => {
     if (state.placedMolecules.length === 0) return;
-    
+
     setIsRepairing(true);
     try {
       const smiles = await generateSmiles(state.placedMolecules);
       if (smiles) {
         const repair = await repairSmiles(smiles);
         setRepairResult(repair);
-        
+
         if (repair.success) {
           if (repair.wasModified) {
             showToast(`SMILES repaired: ${repair.repairSteps.join(', ')}`);
@@ -412,13 +414,13 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
         if (!prev) return null;
 
         const newProgress = Math.min(prev.progress + Math.random() * 15 + 5, 100);
-        
+
         if (newProgress >= 100) {
           // First transition to processing status
           if (prev.status === 'running') {
             return { ...prev, status: 'processing', progress: 100 };
           }
-          
+
           // Then complete with results (simulates API response)
           const completedTask: SimulationTask = {
             ...prev,
@@ -463,7 +465,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
     setIsLoading(true);
     try {
       const result = await parseSmilestoMolecules(smiles);
-      
+
       if (result.success && result.molecules.length > 0) {
         importMolecules(result.molecules);
         showToast(`Imported ${result.atomCount} atoms with ${result.bondCount} bonds`);
@@ -500,7 +502,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
           Loading chemistry engine...
         </div>
       )}
-      
+
       {/* RDKit.js error indicator */}
       {rdkitError && (
         <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-50 
@@ -549,6 +551,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
               setSimulationPageOpen(false);
             }}
             isResultsView={resultsPageOpen}
+            onNavigateToLeaderboard={() => navigate('/leaderboard')}
           />
         )}
 
@@ -557,8 +560,8 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
           <SimulationPage
             isOpen={simulationPageOpen}
             currentSmiles={currentSmiles}
-            currentName={state.placedMolecules.length > 0 
-              ? `Polymer (${state.placedMolecules.length} units)` 
+            currentName={state.placedMolecules.length > 0
+              ? `Polymer (${state.placedMolecules.length} units)`
               : 'Unnamed'}
             queue={simulationQueue}
             runningTask={runningTask}

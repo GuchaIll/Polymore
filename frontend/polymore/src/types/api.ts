@@ -81,3 +81,11 @@ export interface ValidationResponse {
     molecularWeight?: number;
     aromaticRings?: number;
 }
+
+export interface Tier3AnalysisResult {
+    id: number;
+    smiles: string;
+    result: any;
+    created_at: string;
+    updated_at: string;
+}
