@@ -2,16 +2,145 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    outline: 0;
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    @apply h-full font-sans bg-poly-light-bg text-poly-light-text;
+  }
+
+  html.dark,
+  html.dark body,
+  html.dark #root {
+    @apply bg-poly-bg text-white;
+  }
+
+  body {
+    -webkit-font-smoothing: antialiased;
+    @apply overflow-hidden;
+  }
+
+  body,
+  input,
+  button {
+    @apply font-sans text-sm;
+  }
+
+  *:focus {
+    @apply outline-none;
+  }
+
+  a {
+    @apply no-underline;
+  }
+
+  ul {
+    @apply list-none;
+  }
+
+  button {
+    @apply cursor-pointer;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-poly-bg;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-poly-border rounded;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-poly-accent;
+  }
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+@layer components {
+  .tool-btn {
+    @apply flex-1 min-w-[70px] py-2.5 px-2 border-2 border-poly-border rounded-lg bg-poly-bg text-white cursor-pointer transition-all text-xs text-center;
+  }
+
+  .tool-btn:hover {
+    @apply border-poly-accent bg-poly-border;
+  }
+
+  .tool-btn.active {
+    @apply border-poly-danger bg-poly-danger;
+  }
+
+  .toolbar-btn {
+    @apply py-2 px-4 border-none rounded-md bg-poly-border text-white cursor-pointer text-sm transition-all;
+  }
+
+  .toolbar-btn:hover {
+    @apply bg-poly-accent;
+  }
+
+  .toolbar-btn.danger:hover {
+    @apply bg-poly-danger;
+  }
+
+  .view-btn {
+    @apply w-10 h-10 border-2 border-poly-border rounded-lg bg-poly-sidebar/90 text-white cursor-pointer text-lg transition-all;
+  }
+
+  .view-btn:hover {
+    @apply border-poly-accent bg-poly-border;
+  }
+
+  .view-btn.active {
+    @apply border-poly-danger bg-poly-danger;
+  }
+
+  .molecule-card {
+    @apply bg-poly-bg border-2 border-poly-border rounded-xl p-3 cursor-grab transition-all text-center;
+  }
+
+  .molecule-card:hover {
+    @apply border-poly-accent -translate-y-0.5 shadow-lg shadow-poly-accent/30;
+  }
+
+  .molecule-card:active {
+    @apply cursor-grabbing;
+  }
+
+  .molecule-card.dragging {
+    @apply opacity-50;
+  }
+
+  .property-bar {
+    @apply h-1.5 bg-poly-border rounded-sm mt-1 overflow-hidden;
+  }
+
+  .property-fill {
+    @apply h-full rounded-sm transition-all duration-500;
+  }
+
+  .property-fill.strength {
+    background: linear-gradient(90deg, #ff6b6b, #ee5a6f);
+  }
+
+  .property-fill.flexibility {
+    background: linear-gradient(90deg, #4ecdc4, #44a08d);
+  }
+
+  .property-fill.degradability {
+    background: linear-gradient(90deg, #95e1d3, #38ada9);
+  }
+
+  .property-fill.sustainability {
+    background: linear-gradient(90deg, #a8e6cf, #56ab2f);
+  }
 }

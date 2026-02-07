@@ -51,19 +51,19 @@ jobs:
       - name: Copy Compose File to VPS
         uses: appleboy/scp-action@master
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.KEY }}
-          source: "docker-compose.prod.yml"
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "docker-compose.yml,Caddyfile"
           target: "~/app/"
 
       # SSH and Restart
       - name: Deploy on VPS
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.KEY }}
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
           script: |
             # Navigate to app folder
             cd ~/app
@@ -72,8 +72,11 @@ jobs:
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
             # Pull new images
-            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.yml pull
+            
+            # Stop old containers to free ports
+            docker compose -f docker-compose.yml down || true
             
             # Restart services (detached)
             # This smart-restarts only changed containers
-            docker compose -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.yml up -d

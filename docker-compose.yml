@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # The Reverse Proxy (Handles SSL & Domain automatically)
   caddy:
@@ -11,23 +9,21 @@ services:
     volumes:
       - caddy_data:/data
       - caddy_config:/config
-    command: caddy reverse-proxy --from https://spotme.life --to frontend:80
+      - ./Caddyfile:/etc/caddy/Caddyfile
 
   # React Frontend
   frontend:
-    image: ghcr.io/GuchaIll/polymore-frontend:latest
+    image: ghcr.io/guchaill/polymore-frontend:latest
     restart: always
-    # No ports exposed to host; Caddy talks to this internally
+    # No ports exposed; Caddy proxies internally
 
   # FastAPI Backend
   backend:
-    image: ghcr.io/GuchaIll/polymore-backend:latest
+    image: ghcr.io/guchaill/polymore-backend:latest
     restart: always
     expose:
       - "8000"
-    # Frontend can talk to backend via http://backend:8000 if using server-side calls
-    # OR you expose this via Caddy if your browser needs to hit the API directly:
-    command: caddy reverse-proxy --from https://api.spotme.life --to backend:8000
+    # Default command from Dockerfile will run
 
 volumes:
   caddy_data:
