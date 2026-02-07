@@ -250,13 +250,22 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
       
       if (predictionResult.success && predictionResult.properties) {
         // Map backend properties to our PredictedProperties format
+        // Backend returns values - normalize to 0-100 scale if needed
+        const p = predictionResult.properties;
+        const normalize = (val: number | undefined, fallback: number) => {
+          if (val === undefined || val === null) return fallback;
+          // If value is already in 0-100 scale, use as is; otherwise multiply by 100
+          return val > 1 ? val : val * 100;
+        };
+        
         const props: PredictedProperties = {
-          strength: (predictionResult.properties.strength ?? 0.8) * 100,
-          flexibility: (predictionResult.properties.flexibility ?? 0.6) * 100,
-          degradability: (predictionResult.properties.degradability ?? 0.4) * 100,
-          sustainability: (predictionResult.properties.sustainability ?? 0.55) * 100,
+          strength: normalize(p.strength, 80),
+          flexibility: normalize(p.flexibility, 60),
+          degradability: normalize(p.degradability, 40),
+          sustainability: normalize(p.sustainability, 55),
         };
         setPredictedProperties(props);
+        setCurrentSmiles(smilesForPrediction);
         showToast('Properties predicted successfully!');
       } else {
         // Fallback to local prediction if backend fails

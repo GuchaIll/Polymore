@@ -14,6 +14,7 @@
  */
 
 import { PlacedMolecule, Position } from "../types";
+import { predictTier1 } from "../services/services";
 
 // =============================================================================
 // VALIDATION RULE DEFINITIONS
@@ -1807,35 +1808,40 @@ export const validatePolymerComprehensive = async (
 };
 
 /**
- * API endpoint for property prediction (to be called after validation)
+ * API endpoint for property prediction (Tier 1 - heuristics)
+ * Calls the backend /predict/tier-1 endpoint
  */
 export const predictPropertiesFromBackend = async (
     smiles: string
 ): Promise<{ success: boolean; properties?: Record<string, number>; error?: string }> => {
     try {
-        const response = await fetch('http://localhost:8000/api/predict-properties', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ smiles })
-        });
+        const response = await predictTier1(smiles);
         
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
+        // Check if API returned success status
+        if (response.status !== 0 || !response.data) {
             return {
                 success: false,
-                error: errorData.error || `Server error: ${response.status}`
+                error: response.error || response.message || 'Prediction failed'
             };
         }
         
-        const data = await response.json();
+        // Map the TierOneAnalysis response to our expected format
+        // Backend returns values in 0-100 scale based on the API design
+        const data = response.data;
         return {
             success: true,
-            properties: data.properties
+            properties: {
+                strength: data.strength,
+                flexibility: data.flexibility,
+                degradability: data.degradability,
+                sustainability: data.sustainability,
+                sas_score: data.sas_score
+            }
         };
-    } catch (error) {
+    } catch (error: any) {
         return {
             success: false,
-            error: `Failed to connect to prediction server: ${error}`
+            error: error.message || 'Failed to connect to prediction server'
         };
     }
 };

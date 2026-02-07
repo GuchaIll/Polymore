@@ -424,39 +424,40 @@ export function usePolyForgeState() {
     const smiles = state.placedMolecules.map(m => m.smiles).join('.');
     showToast('Predicting properties...');
 
+    //Deprecated
     // Helper function to generate random properties based on molecule composition
     const generateRandomProperties = (): PredictedProperties => {
-      // Use molecule data to influence the random values for more realistic simulation
-      const totalWeight = state.placedMolecules.reduce((sum, m) => sum + m.weight, 0);
-      const moleculeCount = state.placedMolecules.length;
-      const bondCount = state.placedMolecules.reduce((sum, m) => sum + m.connections.length, 0) / 2;
+    //   // Use molecule data to influence the random values for more realistic simulation
+    //   const totalWeight = state.placedMolecules.reduce((sum, m) => sum + m.weight, 0);
+    //   const moleculeCount = state.placedMolecules.length;
+    //   const bondCount = state.placedMolecules.reduce((sum, m) => sum + m.connections.length, 0) / 2;
 
-      // Base values influenced by structure
-      const weightFactor = Math.min(totalWeight / 500, 1); // Normalize weight influence
-      const bondFactor = bondCount > 0 ? Math.min(bondCount / moleculeCount, 1) : 0;
+    //   // Base values influenced by structure
+    //   const weightFactor = Math.min(totalWeight / 500, 1); // Normalize weight influence
+    //   const bondFactor = bondCount > 0 ? Math.min(bondCount / moleculeCount, 1) : 0;
 
-      // Generate properties with some randomness but influenced by structure
-      const strength = Math.min(100, Math.max(10,
-        30 + (weightFactor * 40) + (bondFactor * 20) + (Math.random() * 20 - 10)
-      ));
+    //   // Generate properties with some randomness but influenced by structure
+    //   const strength = Math.min(100, Math.max(10,
+    //     30 + (weightFactor * 40) + (bondFactor * 20) + (Math.random() * 20 - 10)
+    //   ));
 
-      const flexibility = Math.min(100, Math.max(10,
-        50 - (bondFactor * 30) + (Math.random() * 30 - 15)
-      ));
+    //   const flexibility = Math.min(100, Math.max(10,
+    //     50 - (bondFactor * 30) + (Math.random() * 30 - 15)
+    //   ));
 
-      const degradability = Math.min(100, Math.max(10,
-        60 - (weightFactor * 30) + (Math.random() * 30 - 15)
-      ));
+    //   const degradability = Math.min(100, Math.max(10,
+    //     60 - (weightFactor * 30) + (Math.random() * 30 - 15)
+    //   ));
 
-      const sustainability = Math.min(100, Math.max(10,
-        40 + (degradability * 0.3) + (Math.random() * 20 - 10)
-      ));
+    //   const sustainability = Math.min(100, Math.max(10,
+    //     40 + (degradability * 0.3) + (Math.random() * 20 - 10)
+    //   ));
 
       return {
-        strength: Math.round(strength * 10) / 10,
-        flexibility: Math.round(flexibility * 10) / 10,
-        degradability: Math.round(degradability * 10) / 10,
-        sustainability: Math.round(sustainability * 10) / 10
+        strength: Math.round(0 * 10) / 10,
+        flexibility: Math.round(0 * 10) / 10,
+        degradability: Math.round(0 * 10) / 10,
+        sustainability: Math.round(0 * 10) / 10
       };
     };
 
