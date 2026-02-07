@@ -1817,8 +1817,8 @@ export const predictPropertiesFromBackend = async (
     try {
         const response = await predictTier1(smiles);
         
-        // Check if API returned success status
-        if (response.status !== 0 || !response.data) {
+        // Check if API returned success status (200 = success)
+        if (response.status !== 200 || !response.data) {
             return {
                 success: false,
                 error: response.error || response.message || 'Prediction failed'
