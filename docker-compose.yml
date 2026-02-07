@@ -23,7 +23,31 @@ services:
     restart: always
     expose:
       - "8000"
+    depends_on:
+      - redis
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     # Default command from Dockerfile will run
+
+  # Redis for Task Queue
+  redis:
+    image: redis:7-alpine
+    restart: always
+    expose:
+      - "6379"
+
+  # Celery Worker
+  worker:
+    build: ./backend
+    restart: always
+    command: celery -A worker.celery_app worker --loglevel=info
+    depends_on:
+      - redis
+      - backend
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
 volumes:
   caddy_data:

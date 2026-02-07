@@ -36,8 +36,11 @@ from core.exceptions import (
     ServerException,
 )
 from features.heuristics import predict_properties
-from features.advanced_analysis import analyze_molecule_high_compute
+# from features.advanced_analysis import analyze_molecule_high_compute  # Moved to worker
 from schemas.analysis import AnalysisRequest, AnalysisResponse
+from schemas.task import TaskSubmissionResponse, TaskStatusResponse
+from worker import celery_app, analyze_molecule_task
+from celery.result import AsyncResult
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -129,25 +132,67 @@ def predict_heuristics(request: SmiRequest):
         logger.error(f"Prediction failed for SMILES {request.smiles}: {e}")
         raise ServerException(detail=str(e))
 
-@app.post("/api/analyze/high-compute", response_model=ResponseModel[AnalysisResponse])
+@app.post("/api/analyze/high-compute", status_code=202, response_model=ResponseModel[TaskSubmissionResponse])
 def analyze_high_compute(request: AnalysisRequest):
     """
-    Perform high-compute analysis on a molecule using GFN2-xTB.
+    Submit a high-compute analysis task to the Celery queue.
+    
+    This endpoint accepts a molecule SMILES string and offloads the intensive
+    quantum mechanical analysis (GFN2-xTB) to a background worker.
+    
+    Returns:
+        ResponseModel containing the task_id and submission status.
     """
     try:
-        results = analyze_molecule_high_compute(request.smiles)
+        task = analyze_molecule_task.delay(request.smiles)
         return ResponseModel(
-            status=200,
-            message="Analysis successful",
-            data=AnalysisResponse(**results)
+            status=202,
+            message="Analysis submitted to queue",
+            data=TaskSubmissionResponse(
+                task_id=task.id,
+                status="submitted",
+                message="Analysis submitted successfully"
+            )
         )
-    except ImportError as e:
-        raise ServerException(detail="High-compute analysis unavailable: " + str(e))
-    except ValueError as e:
-        raise BadRequestException(detail=str(e))
     except Exception as e:
-        logger.error(f"High-compute analysis failed: {e}")
+        logger.error(f"Failed to submit analysis task: {e}")
         raise ServerException(detail=str(e))
+
+@app.get("/api/tasks/{task_id}", response_model=ResponseModel[TaskStatusResponse])
+def get_task_status(task_id: str):
+    """
+    Retrieve the status and result of a background task.
+    
+    Poll this endpoint using the `task_id` returned from the submission endpoint.
+    It returns the current status (PENDING, PROGRESS, SUCCESS, FAILURE) and
+    any available progress metadata or final results.
+    """
+    print("Checking task status for:", task_id)
+    task_result = AsyncResult(task_id, app=celery_app)
+    
+    response_data = TaskStatusResponse(
+        task_id=task_id,
+        status=task_result.status,
+    )
+    
+    if task_result.status == 'SUCCESS':
+        # Ensure result is a dict, handle potential serialization issues if needed
+        response_data.result = task_result.result if isinstance(task_result.result, dict) else {"data": task_result.result}
+        response_data.progress = 100
+        
+    elif task_result.status == 'FAILURE':
+        response_data.error = str(task_result.result)
+        
+    elif task_result.status == 'PROGRESS':
+        meta = task_result.result if isinstance(task_result.result, dict) else {}
+        response_data.progress = meta.get('current', 0)
+        response_data.message = meta.get('status', '')
+        
+    return ResponseModel(
+        status=200,
+        message=f"Task status: {task_result.status}",
+        data=response_data
+    )
 
 @app.post("/api/validate-smiles", response_model=ResponseModel[SmilesValidationResponse])
 def validate_smiles(request: SmilesValidationRequest):

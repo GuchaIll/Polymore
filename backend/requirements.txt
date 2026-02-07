@@ -3,3 +3,4 @@ uvicorn
 rdkit
 tblite-python
 numpy
+celery[redis]
