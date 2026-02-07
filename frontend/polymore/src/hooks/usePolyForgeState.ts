@@ -327,11 +327,15 @@ export function usePolyForgeState() {
       return;
     }
 
-    // Generate SMILES string from placed molecules
-    // Combine all molecule SMILES with dots (disconnected structures)
-    const combinedSMILES = state.placedMolecules.map(m => m.smiles).join('.');
+    // Generate standard .smi format: SMILES [tab] NAME per line
+    // This format is compatible with RDKit, OpenBabel, and ML pipelines
+    const lines = state.placedMolecules.map(m => `${m.smiles}\t${m.name}`);
     
-    const content = `# Polymer Structure SMILES Export\n# Generated: ${new Date().toISOString()}\n# Molecules: ${state.placedMolecules.length}\n\n${combinedSMILES}\n\n# Individual molecules:\n${state.placedMolecules.map(m => `# ${m.name}: ${m.smiles}`).join('\n')}`;
+    // Also add the combined polymer SMILES as first entry
+    const combinedSMILES = state.placedMolecules.map(m => m.smiles).join('.');
+    const polymerName = `Polymer_${state.placedMolecules.length}units`;
+    
+    const content = `${combinedSMILES}\t${polymerName}\n${lines.join('\n')}`;
 
     const blob = new Blob([content], { type: 'chemical/x-daylight-smiles' });
     const url = URL.createObjectURL(blob);
