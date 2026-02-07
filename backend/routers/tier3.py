@@ -10,6 +10,10 @@ from database import get_db
 from models.tier3_analysis import Tier3Analysis
 from schemas.tier3 import Tier3AnalysisCreate, Tier3AnalysisResult, Tier3AnalysisUpdate
 from schemas.common import ResponseModel
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/tier3",
@@ -25,7 +29,9 @@ def list_tier3_results(
     """
     List all Tier 3 analysis results.
     """
+    logger.info(f"Fetching Tier 3 leaderboard with skip={skip}, limit={limit}")
     results = db.query(Tier3Analysis).offset(skip).limit(limit).all()
+    logger.info(f"Found {len(results)} Tier 3 results")
     return ResponseModel(
         status=200,
         message="Retrieved Tier 3 results successfully",
