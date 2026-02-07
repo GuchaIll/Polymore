@@ -28,7 +28,7 @@ app = FastAPI(
 # CORS middleware for frontend communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://spotme.life", "https://spotme.life", "http://api.spotme.life", "https://api.spotme.life", "http://localhost:8000", "https://localhost:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -142,7 +142,7 @@ def predict_heuristics(request: SmiRequest):
     )
 
 
-@app.post("/api/validate-smiles", response_model=SmilesValidationResponse)
+@app.post("/api/validate-smiles", response_model=ResponseModel[SmilesValidationResponse])
 def validate_smiles(request: SmilesValidationRequest):
     """
     Validate a single SMILES string using RDKit.
@@ -154,40 +154,41 @@ def validate_smiles(request: SmilesValidationRequest):
         request: SmilesValidationRequest with SMILES string
         
     Returns:
-        SmilesValidationResponse with validation result
+        ResponseModel[SmilesValidationResponse] with validation result
     """
-    try:
-        mol = Chem.MolFromSmiles(request.smiles)
-        
-        if mol is None:
-            return SmilesValidationResponse(
+    mol = Chem.MolFromSmiles(request.smiles)
+    
+    if mol is None:
+        return ResponseModel(
+            status=200, # or 400? Keeping 200 as per requested format for "successful return with data" even if isValid is False? 
+            # Actually, if it's a validation Check, returning 200 with isValid=False is standard.
+            message="Validation completed",
+            data=SmilesValidationResponse(
                 isValid=False,
                 error="Invalid SMILES: could not parse molecule"
             )
-        
-        # Get canonical SMILES
-        canonical = Chem.MolToSmiles(mol, canonical=True)
-        
-        # Calculate basic properties
-        mw = Descriptors.MolWt(mol)
-        formula = rdMolDescriptors.CalcMolFormula(mol)
-        
-        return SmilesValidationResponse(
+        )
+    
+    # Get canonical SMILES
+    canonical = Chem.MolToSmiles(mol, canonical=True)
+    
+    # Calculate basic properties
+    mw = Descriptors.MolWt(mol)
+    formula = rdMolDescriptors.CalcMolFormula(mol)
+    
+    return ResponseModel(
+        status=200,
+        message="Validation successful",
+        data=SmilesValidationResponse(
             isValid=True,
             canonicalSmiles=canonical,
             molecularWeight=round(mw, 2),
             formula=formula
         )
-        
-    except Exception as e:
-        logger.error(f"SMILES validation error: {e}")
-        return SmilesValidationResponse(
-            isValid=False,
-            error=f"Validation error: {str(e)}"
-        )
+    )
 
 
-@app.post("/api/validate-polymer", response_model=ValidationResponse)
+@app.post("/api/validate-polymer", response_model=ResponseModel[ValidationResponse])
 def validate_polymer(request: ValidatePolymerRequest):
     """
     Validate a polymer configuration from placed molecules.
@@ -200,18 +201,22 @@ def validate_polymer(request: ValidatePolymerRequest):
         request: ValidatePolymerRequest with molecules and generated SMILES
         
     Returns:
-        ValidationResponse with comprehensive validation results
+        ResponseModel[ValidationResponse] with comprehensive validation results
     """
     errors: List[str] = []
     warnings: List[str] = []
     
     if not request.molecules:
-        return ValidationResponse(
-            isValid=False,
-            canonicalSmiles="",
-            errors=["No molecules provided"],
-            warnings=[],
-            polymerType="unknown"
+        return ResponseModel(
+            status=400,
+            message="No molecules provided",
+            data=ValidationResponse(
+                isValid=False,
+                canonicalSmiles="",
+                errors=["No molecules provided"],
+                warnings=[],
+                polymerType="unknown"
+            )
         )
     
     # Validate each molecule's SMILES individually
@@ -291,14 +296,18 @@ def validate_polymer(request: ValidatePolymerRequest):
     # Check for aromaticity consistency
     _check_aromaticity(validated_mols, warnings)
     
-    return ValidationResponse(
-        isValid=len(errors) == 0,
-        canonicalSmiles=canonical_smiles,
-        errors=errors,
-        warnings=warnings,
-        polymerType=polymer_type,
-        molecularWeight=mw,
-        aromaticRings=aromatic_rings
+    return ResponseModel(
+        status=200,
+        message="Polymer validation complete",
+        data=ValidationResponse(
+            isValid=len(errors) == 0,
+            canonicalSmiles=canonical_smiles,
+            errors=errors,
+            warnings=warnings,
+            polymerType=polymer_type,
+            molecularWeight=mw,
+            aromaticRings=aromatic_rings
+        )
     )
 
 
@@ -392,7 +401,7 @@ def _check_aromaticity(
             )
 
 
-@app.post("/api/generate-psmiles")
+@app.post("/api/generate-psmiles", response_model=ResponseModel[dict])
 def generate_polymer_smiles(request: ValidatePolymerRequest):
     """
     Generate polymer SMILES (pSMILES) notation from placed molecules.
@@ -404,37 +413,46 @@ def generate_polymer_smiles(request: ValidatePolymerRequest):
         request: ValidatePolymerRequest with molecules
         
     Returns:
-        Dictionary with pSMILES and standard SMILES
+        ResponseModel[dict] with pSMILES and standard SMILES
     """
-    try:
-        # First validate normally
-        validation = validate_polymer(request)
+    # First validate normally
+    # We can't call the endpoint function directly if we want the data easily,
+    # but let's reuse the logic or call helper.
+    # Refactoring validate_polymer to return the object would be cleaner,
+    # but for now let's just use the logic inside validate_polymer by refactoring it?
+    # Or just copy paste/call logic. To avoid complex refactor, I will just replicate the validation logic or better:
+    # Actually, validate_polymer returns ResponseModel now.
+    
+    validation_response_model = validate_polymer(request)
+    validation = validation_response_model.data
+    
+    if not validation.isValid:
+         # Propagate errors
+        return ResponseModel(
+            status=400,
+            message="Validation failed",
+            data={
+                "errors": validation.errors
+            }
+        )
         
-        if not validation.isValid:
-            raise HTTPException(
-                status_code=400, 
-                detail={"errors": validation.errors}
-            )
-        
-        # For linear polymers, add star atoms at ends
-        canonical = validation.canonicalSmiles
-        
-        if validation.polymerType == "linear" and canonical:
-            # Simple pSMILES notation: [*]...monomer...[*]
-            psmiles = f"[*]{canonical}[*]"
-        else:
-            # For branched/cyclic, use standard notation
-            psmiles = canonical
-        
-        return {
+    # For linear polymers, add star atoms at ends
+    canonical = validation.canonicalSmiles
+    
+    if validation.polymerType == "linear" and canonical:
+        # Simple pSMILES notation: [*]...monomer...[*]
+        psmiles = f"[*]{canonical}[*]"
+    else:
+        # For branched/cyclic, use standard notation
+        psmiles = canonical
+    
+    return ResponseModel(
+        status=200,
+        message="pSMILES generation successful",
+        data={
             "psmiles": psmiles,
             "smiles": canonical,
             "polymerType": validation.polymerType,
             "molecularWeight": validation.molecularWeight
         }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"pSMILES generation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    )
