@@ -12,7 +12,10 @@ import {
   validatePolymerComprehensive,
   predictPropertiesFromBackend,
   parseSmilestoMolecules,
-  PolymerValidationResult
+  PolymerValidationResult,
+  repairSmiles,
+  SmilesRepairResult,
+  generateSmiles
 } from '../../util';
 
 interface PolyForgeProps {
@@ -56,6 +59,8 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
   const [validationResult, setValidationResult] = useState<PolymerValidationResult | null>(null);
   const [showValidationPopup, setShowValidationPopup] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [repairResult, setRepairResult] = useState<SmilesRepairResult | null>(null);
+  const [isRepairing, setIsRepairing] = useState(false);
   const { isDark, toggleTheme } = useTheme();
 
   const handleDragStart = useCallback((molecule: Molecule) => {
@@ -143,6 +148,8 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
     }
 
     setIsLoading(true);
+    setRepairResult(null); // Clear previous repair results
+    
     try {
       const result = await validatePolymerComprehensive(state.placedMolecules);
       setValidationResult(result);
@@ -150,6 +157,21 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
       if (result.isValid) {
         showToast(`Valid ${result.polymerType} polymer: ${result.canonicalSmiles}`);
       } else {
+        // Auto-trigger repair attempt when validation fails
+        try {
+          const smiles = await generateSmiles(state.placedMolecules);
+          if (smiles) {
+            const repair = await repairSmiles(smiles);
+            setRepairResult(repair);
+            
+            if (repair.success && repair.wasModified) {
+              showToast('Auto-repair found fixes - see suggestions');
+            }
+          }
+        } catch {
+          // Repair failed silently, still show validation popup
+        }
+        
         // Show popup with detailed errors
         setShowValidationPopup(true);
       }
@@ -172,12 +194,29 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
     }
 
     setIsLoading(true);
+    setRepairResult(null); // Clear previous repair results
+    
     try {
       // Comprehensive validation first
       const result = await validatePolymerComprehensive(state.placedMolecules);
       setValidationResult(result);
       
       if (!result.isValid) {
+        // Auto-trigger repair attempt when validation fails
+        try {
+          const smiles = await generateSmiles(state.placedMolecules);
+          if (smiles) {
+            const repair = await repairSmiles(smiles);
+            setRepairResult(repair);
+            
+            if (repair.success && repair.wasModified) {
+              showToast('Auto-repair found fixes - see suggestions');
+            }
+          }
+        } catch {
+          // Repair failed silently
+        }
+        
         // Show popup with validation errors
         setShowValidationPopup(true);
         return;
@@ -219,6 +258,34 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
       setIsLoading(false);
     }
   }, [rdkitReady, state.placedMolecules, predictProperties, showToast]);
+
+  // Manual auto-repair trigger from validation popup
+  const handleAutoRepair = useCallback(async () => {
+    if (state.placedMolecules.length === 0) return;
+    
+    setIsRepairing(true);
+    try {
+      const smiles = await generateSmiles(state.placedMolecules);
+      if (smiles) {
+        const repair = await repairSmiles(smiles);
+        setRepairResult(repair);
+        
+        if (repair.success) {
+          if (repair.wasModified) {
+            showToast(`SMILES repaired: ${repair.repairSteps.join(', ')}`);
+          } else {
+            showToast('SMILES is already valid');
+          }
+        } else {
+          showToast(repair.error || 'Could not repair SMILES');
+        }
+      }
+    } catch (error) {
+      showToast(`Repair error: ${error}`);
+    } finally {
+      setIsRepairing(false);
+    }
+  }, [state.placedMolecules, showToast]);
 
   const handleImportSmiles = useCallback(async (smiles: string) => {
     if (!rdkitReady) {
@@ -338,6 +405,9 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
         errors={validationResult?.errors || []}
         warnings={validationResult?.warnings || []}
         title={`Validation Failed (${validationResult?.errors?.length || 0} errors)`}
+        repairResult={repairResult}
+        onAutoRepair={handleAutoRepair}
+        isRepairing={isRepairing}
       />
 
       {/* Loading overlay */}

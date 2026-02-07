@@ -7,10 +7,20 @@
  * Optimization strategies:
  * 1. Spatial - Adjust bond lengths and molecule spacing
  * 2. Validation - Fix common SMILES/structure issues
+ * 3. Polymer Rules - Polymerizability, mechanical, sustainability analysis
+ * 4. Auto-repair - Fix invalid SMILES automatically
  */
 
 import { PlacedMolecule, Position } from '../types';
-import { PolymerValidationResult, ValidationRuleCode } from './index';
+import { 
+    PolymerValidationResult, 
+    ValidationRuleCode,
+    analyzePolymerStructure,
+    PolymerAnalysis,
+    repairSmiles,
+    SmilesRepairResult,
+    generateSmiles
+} from './index';
 
 // =============================================================================
 // CONSTANTS
@@ -67,6 +77,40 @@ export interface OptimizationSuggestion {
   description: string;
   action: 'auto' | 'manual';
   priority: 'high' | 'medium' | 'low';
+  category?: 'polymerizability' | 'mechanical' | 'sustainability' | 'validation' | 'spatial';
+  ruleCode?: ValidationRuleCode;
+}
+
+// =============================================================================
+// POLYMER RULE THRESHOLDS
+// =============================================================================
+
+/** Thresholds for polymerizability rules */
+const POLYMERIZABILITY_THRESHOLDS = {
+  MIN_REACTIVE_SITES: 2,        // Rule P1: Minimum connection points
+  MAX_REACTIVE_SITES: 4,        // Rule P2: Crosslink risk threshold
+};
+
+/** Thresholds for mechanical/physical behavior rules */
+const MECHANICAL_THRESHOLDS = {
+  HIGH_FLEXIBILITY_ROTATABLE: 5,   // Rule M1: Many rotatable bonds
+  HIGH_AROMATIC_RATIO: 0.4,        // Rule M2: Aromatic atoms / total atoms
+  LOW_POLAR_GROUPS: 2,             // Rule M3: Minimum polar groups for strength
+};
+
+/** Thresholds for sustainability rules */
+const SUSTAINABILITY_THRESHOLDS = {
+  HALOGEN_WARNING: 2,           // Rule S2: Halogen count warning
+  HIGH_MW_THRESHOLD: 500,       // Rule S3: High molecular weight threshold
+  MAX_ATOMS_FOR_DEGRADABILITY: 50,  // Rule S3: Atom count threshold
+};
+
+/**
+ * Extended suggestion with repair information
+ */
+export interface PolymerRuleSuggestion extends OptimizationSuggestion {
+  analysis?: Partial<PolymerAnalysis>;
+  repairResult?: SmilesRepairResult;
 }
 
 // =============================================================================
@@ -469,6 +513,370 @@ export const analyzeValidationErrors = (
   return suggestions;
 };
 
+// =============================================================================
+// COMPREHENSIVE POLYMER RULE ANALYSIS
+// =============================================================================
+
+/**
+ * Analyze polymer structure against all rule categories:
+ * - Polymerizability (P1, P2)  
+ * - Mechanical behavior (M1, M2, M3)
+ * - Sustainability (S1, S2, S3)
+ * 
+ * @param smiles - SMILES string to analyze
+ * @returns Array of suggestions with detailed recommendations
+ */
+export const analyzePolymerRules = async (
+  smiles: string
+): Promise<PolymerRuleSuggestion[]> => {
+  const suggestions: PolymerRuleSuggestion[] = [];
+  
+  if (!smiles || smiles.trim() === '') {
+    return suggestions;
+  }
+  
+  // Get comprehensive polymer analysis
+  const analysis = await analyzePolymerStructure(smiles);
+  
+  // === POLYMERIZABILITY RULES ===
+  
+  // Rule P1: Minimum reactive sites (already in validation, but add suggestion text)
+  if (analysis.reactiveSites < POLYMERIZABILITY_THRESHOLDS.MIN_REACTIVE_SITES) {
+    suggestions.push({
+      title: 'Cannot Polymerize - Too Few Reactive Sites',
+      description: `Found ${analysis.reactiveSites} reactive site(s). Add at least two reactive functional groups (-OH, -COOH, -NH2, or [*]) to enable chain formation.`,
+      action: 'manual',
+      priority: 'high',
+      category: 'polymerizability',
+      ruleCode: ValidationRuleCode.RULE_5_MIN_REACTIVE_SITES,
+      analysis: { reactiveSites: analysis.reactiveSites }
+    });
+  }
+  
+  // Rule P2: Over-functionalized (crosslink risk)
+  if (analysis.reactiveSites > POLYMERIZABILITY_THRESHOLDS.MAX_REACTIVE_SITES) {
+    suggestions.push({
+      title: 'Crosslink Risk - Over-Functionalized',
+      description: `Found ${analysis.reactiveSites} reactive sites. Too many reactive sites may cause crosslinking and form brittle gel networks. Reduce functionality for linear polymers.`,
+      action: 'manual',
+      priority: 'medium',
+      category: 'polymerizability',
+      ruleCode: ValidationRuleCode.RULE_P2_CROSSLINK_RISK,
+      analysis: { reactiveSites: analysis.reactiveSites }
+    });
+  }
+  
+  // === MECHANICAL BEHAVIOR RULES ===
+  
+  // Rule M1: Too flexible (low Tg prediction)
+  const aromaticRatio = analysis.atomCount > 0 
+    ? analysis.aromaticAtoms / analysis.atomCount 
+    : 0;
+  
+  if (analysis.rotatableBonds > MECHANICAL_THRESHOLDS.HIGH_FLEXIBILITY_ROTATABLE 
+      && analysis.aromaticRings === 0) {
+    suggestions.push({
+      title: 'Low Rigidity - High Flexibility',
+      description: `Structure has ${analysis.rotatableBonds} rotatable bonds and no rigid rings. This may result in a low glass transition temperature (Tg). Adding aromatic or cyclic groups may increase stiffness.`,
+      action: 'manual',
+      priority: 'low',
+      category: 'mechanical',
+      ruleCode: ValidationRuleCode.RULE_M1_TOO_FLEXIBLE,
+      analysis: { rotatableBonds: analysis.rotatableBonds, aromaticRings: analysis.aromaticRings }
+    });
+  }
+  
+  // Rule M2: Too brittle (high aromatic content)
+  if (aromaticRatio > MECHANICAL_THRESHOLDS.HIGH_AROMATIC_RATIO) {
+    suggestions.push({
+      title: 'Brittleness Risk - High Rigidity',
+      description: `High aromatic content (${(aromaticRatio * 100).toFixed(0)}% aromatic atoms) increases rigidity but may cause brittleness. Consider adding flexible spacers (-CH2- or ether linkages) to improve toughness.`,
+      action: 'manual',
+      priority: 'low',
+      category: 'mechanical',
+      ruleCode: ValidationRuleCode.RULE_M2_TOO_BRITTLE,
+      analysis: { aromaticAtoms: analysis.aromaticAtoms, atomCount: analysis.atomCount }
+    });
+  }
+  
+  // Rule M3: Weak intermolecular forces
+  const polarGroups = analysis.hBondDonors + analysis.hBondAcceptors;
+  if (polarGroups < MECHANICAL_THRESHOLDS.LOW_POLAR_GROUPS && analysis.atomCount > 5) {
+    suggestions.push({
+      title: 'Weak Intermolecular Forces',
+      description: `Only ${polarGroups} polar group(s) detected. Lack of polar groups reduces intermolecular interactions. Add -OH, -NH, or ester groups to improve material strength through hydrogen bonding.`,
+      action: 'manual',
+      priority: 'low',
+      category: 'mechanical',
+      ruleCode: ValidationRuleCode.RULE_M3_WEAK_FORCES,
+      analysis: { hBondDonors: analysis.hBondDonors, hBondAcceptors: analysis.hBondAcceptors }
+    });
+  }
+  
+  // === SUSTAINABILITY RULES ===
+  
+  // Rule S1: Non-degradable backbone
+  if (analysis.totalDegradableLinkages === 0 && analysis.atomCount > 10) {
+    suggestions.push({
+      title: 'Non-Biodegradable Backbone',
+      description: 'Backbone contains only C-C bonds without hydrolyzable linkages (no esters, amides, or carbonates). Consider adding ester or amide linkages to enable biodegradability.',
+      action: 'manual',
+      priority: 'medium',
+      category: 'sustainability',
+      ruleCode: ValidationRuleCode.RULE_S1_NON_DEGRADABLE,
+      analysis: { 
+        esterLinkages: analysis.esterLinkages, 
+        amideLinkages: analysis.amideLinkages,
+        totalDegradableLinkages: analysis.totalDegradableLinkages 
+      }
+    });
+  }
+  
+  // Rule S2: Halogen warning
+  if (analysis.totalHalogens >= SUSTAINABILITY_THRESHOLDS.HALOGEN_WARNING) {
+    const halogenDetails = [];
+    if (analysis.fluorineCount > 0) halogenDetails.push(`F:${analysis.fluorineCount}`);
+    if (analysis.chlorineCount > 0) halogenDetails.push(`Cl:${analysis.chlorineCount}`);
+    if (analysis.bromineCount > 0) halogenDetails.push(`Br:${analysis.bromineCount}`);
+    if (analysis.iodineCount > 0) halogenDetails.push(`I:${analysis.iodineCount}`);
+    
+    suggestions.push({
+      title: 'Environmental Concern - Halogens',
+      description: `Found ${analysis.totalHalogens} halogen atom(s) (${halogenDetails.join(', ')}). Halogenated polymers are less environmentally friendly and harder to recycle. Consider non-halogen alternatives for greener design.`,
+      action: 'manual',
+      priority: 'medium',
+      category: 'sustainability',
+      ruleCode: ValidationRuleCode.RULE_S2_HALOGEN_WARNING,
+      analysis: { 
+        totalHalogens: analysis.totalHalogens,
+        fluorineCount: analysis.fluorineCount,
+        chlorineCount: analysis.chlorineCount,
+        bromineCount: analysis.bromineCount,
+        iodineCount: analysis.iodineCount
+      }
+    });
+  }
+  
+  // Rule S3: High MW repeat unit
+  if (analysis.atomCount > SUSTAINABILITY_THRESHOLDS.MAX_ATOMS_FOR_DEGRADABILITY) {
+    suggestions.push({
+      title: 'Large Repeat Unit',
+      description: `Structure has ${analysis.atomCount} atoms (estimated MW: ~${analysis.estimatedMW}). Large repeat units may hinder degradability and processing. Consider simplifying the monomer for better processability.`,
+      action: 'manual',
+      priority: 'low',
+      category: 'sustainability',
+      ruleCode: ValidationRuleCode.RULE_S3_HIGH_MW_UNIT,
+      analysis: { atomCount: analysis.atomCount, estimatedMW: analysis.estimatedMW }
+    });
+  }
+  
+  return suggestions;
+};
+
+/**
+ * Attempt to auto-repair invalid SMILES and provide feedback
+ * 
+ * @param smiles - Potentially invalid SMILES string
+ * @returns Repair result with suggestions
+ */
+export const attemptSmilesRepair = async (
+  smiles: string
+): Promise<{ repairResult: SmilesRepairResult; suggestions: PolymerRuleSuggestion[] }> => {
+  const suggestions: PolymerRuleSuggestion[] = [];
+  
+  const repairResult = await repairSmiles(smiles);
+  
+  if (repairResult.success) {
+    if (repairResult.wasModified) {
+      suggestions.push({
+        title: 'SMILES Auto-Repaired',
+        description: `Original SMILES was modified. Changes: ${repairResult.repairSteps.join(', ')}`,
+        action: 'auto',
+        priority: 'medium',
+        category: 'validation',
+        repairResult
+      });
+    }
+  } else {
+    suggestions.push({
+      title: 'SMILES Repair Failed',
+      description: `Could not repair SMILES. Attempted: ${repairResult.repairSteps.join(', ')}. ${repairResult.error || ''}`,
+      action: 'manual',
+      priority: 'high',
+      category: 'validation',
+      ruleCode: ValidationRuleCode.RULE_4_INVALID_SYNTAX,
+      repairResult
+    });
+  }
+  
+  return { repairResult, suggestions };
+};
+
+/**
+ * Get comprehensive optimization suggestions combining all analyses:
+ * - Spatial issues (bond lengths, overlaps)
+ * - Validation errors
+ * - Polymer rules (polymerizability, mechanical, sustainability)
+ * - Auto-repair suggestions
+ * 
+ * @param molecules - Array of placed molecules
+ * @param validationResult - Optional validation result
+ * @param attemptRepair - Whether to attempt SMILES repair
+ * @returns Comprehensive array of suggestions sorted by priority
+ */
+export const getComprehensiveSuggestions = async (
+  molecules: PlacedMolecule[],
+  validationResult?: PolymerValidationResult,
+  attemptRepair: boolean = true
+): Promise<PolymerRuleSuggestion[]> => {
+  const allSuggestions: PolymerRuleSuggestion[] = [];
+  
+  if (molecules.length === 0) {
+    allSuggestions.push({
+      title: 'Add Molecules',
+      description: 'Add molecules to the canvas to begin building your polymer.',
+      action: 'manual',
+      priority: 'high',
+      category: 'spatial'
+    });
+    return allSuggestions;
+  }
+  
+  // Generate SMILES for analysis
+  let smiles = '';
+  try {
+    smiles = await generateSmiles(molecules);
+  } catch {
+    allSuggestions.push({
+      title: 'Cannot Generate SMILES',
+      description: 'Unable to generate SMILES from current structure. Check molecule connections.',
+      action: 'manual',
+      priority: 'high',
+      category: 'validation'
+    });
+  }
+  
+  // Attempt repair if SMILES is available and requested
+  if (smiles && attemptRepair) {
+    const { suggestions: repairSuggestions, repairResult } = await attemptSmilesRepair(smiles);
+    
+    // If repair was successful and modified, use repaired SMILES for analysis
+    if (repairResult.success && repairResult.wasModified) {
+      allSuggestions.push(...repairSuggestions);
+      smiles = repairResult.canonical || repairResult.repaired;
+    } else if (!repairResult.success) {
+      allSuggestions.push(...repairSuggestions);
+    }
+  }
+  
+  // Run polymer rule analysis if we have valid SMILES
+  if (smiles) {
+    const ruleSuggestions = await analyzePolymerRules(smiles);
+    allSuggestions.push(...ruleSuggestions);
+  }
+  
+  // Add validation-based suggestions
+  if (validationResult) {
+    const validationSuggestions = analyzeValidationErrors(validationResult);
+    // Add category to validation suggestions
+    validationSuggestions.forEach(s => {
+      allSuggestions.push({
+        ...s,
+        category: 'validation'
+      });
+    });
+  }
+  
+  // Add spatial suggestions
+  const spatialSuggestions = checkSpatialIssues(molecules);
+  allSuggestions.push(...spatialSuggestions);
+  
+  // Sort by priority: high > medium > low
+  const priorityOrder = { high: 0, medium: 1, low: 2 };
+  allSuggestions.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+  
+  // De-duplicate suggestions with same title
+  const seen = new Set<string>();
+  return allSuggestions.filter(s => {
+    if (seen.has(s.title)) return false;
+    seen.add(s.title);
+    return true;
+  });
+};
+
+/**
+ * Check for spatial issues in molecule placement
+ * @param molecules - Array of placed molecules
+ * @returns Suggestions for spatial improvements
+ */
+const checkSpatialIssues = (molecules: PlacedMolecule[]): PolymerRuleSuggestion[] => {
+  const suggestions: PolymerRuleSuggestion[] = [];
+  
+  // Check for disconnected fragments
+  const visited = new Set<number>();
+  const queue = [molecules[0].id];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    const mol = molecules.find(m => m.id === current);
+    mol?.connections.forEach(c => {
+      if (!visited.has(c)) queue.push(c);
+    });
+  }
+
+  if (visited.size < molecules.length) {
+    suggestions.push({
+      title: 'Disconnected Fragments',
+      description: `Structure has ${molecules.length - visited.size + 1} disconnected fragments. Use auto-connect or manually bond molecules.`,
+      action: 'auto',
+      priority: 'high',
+      category: 'spatial',
+      ruleCode: ValidationRuleCode.RULE_2_DISCONNECTED
+    });
+  }
+
+  // Check for isolated molecules
+  const isolatedCount = molecules.filter(m => m.connections.length === 0).length;
+  if (isolatedCount > 0 && molecules.length > 1) {
+    suggestions.push({
+      title: 'Isolated Molecules',
+      description: `${isolatedCount} molecule(s) have no bonds. Connect them to form a polymer chain.`,
+      action: 'manual',
+      priority: 'high',
+      category: 'spatial'
+    });
+  }
+
+  // Check for bond length issues
+  let shortBonds = 0;
+  let longBonds = 0;
+  molecules.forEach(mol => {
+    mol.connections.forEach(connId => {
+      if (mol.id >= connId) return;
+      const conn = molecules.find(m => m.id === connId);
+      if (conn) {
+        const dist = distance(mol.position, conn.position);
+        if (dist < MIN_BOND_LENGTH) shortBonds++;
+        else if (dist > MAX_BOND_LENGTH) longBonds++;
+      }
+    });
+  });
+
+  if (shortBonds > 0 || longBonds > 0) {
+    suggestions.push({
+      title: 'Bond Length Issues',
+      description: `${shortBonds} bond(s) too short, ${longBonds} bond(s) too long. Run position optimization to fix.`,
+      action: 'auto',
+      priority: 'medium',
+      category: 'spatial',
+      ruleCode: ValidationRuleCode.CANVAS_SPATIAL_ERROR
+    });
+  }
+
+  return suggestions;
+};
+
 /**
  * Attempt to auto-fix disconnected fragments by connecting nearest unconnected molecules
  */
@@ -663,6 +1071,12 @@ export const optimizeStructure = (
 
 /**
  * Get optimization suggestions without applying changes
+ * 
+ * NOTE: For comprehensive analysis including polymer rules (mechanical,
+ * sustainability, polymerizability), use getComprehensiveSuggestions() instead.
+ * This function provides basic spatial and validation suggestions only.
+ * 
+ * @deprecated Use getComprehensiveSuggestions for full analysis
  */
 export const getOptimizationSuggestions = (
   molecules: PlacedMolecule[],

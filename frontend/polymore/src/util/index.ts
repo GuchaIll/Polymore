@@ -40,6 +40,19 @@ export enum ValidationRuleCode {
     RULE_10_FORBIDDEN_ELEMENTS = "RULE_10_FORBIDDEN_ELEMENTS",
     RULE_11_RADICALS_CHARGES = "RULE_11_RADICALS_CHARGES",
     
+    // Polymerizability Rules
+    RULE_P2_CROSSLINK_RISK = "RULE_P2_CROSSLINK_RISK",
+    
+    // Mechanical/Physical Rules
+    RULE_M1_TOO_FLEXIBLE = "RULE_M1_TOO_FLEXIBLE",
+    RULE_M2_TOO_BRITTLE = "RULE_M2_TOO_BRITTLE",
+    RULE_M3_WEAK_FORCES = "RULE_M3_WEAK_FORCES",
+    
+    // Sustainability Rules
+    RULE_S1_NON_DEGRADABLE = "RULE_S1_NON_DEGRADABLE",
+    RULE_S2_HALOGEN_WARNING = "RULE_S2_HALOGEN_WARNING",
+    RULE_S3_HIGH_MW_UNIT = "RULE_S3_HIGH_MW_UNIT",
+    
     // Canvas/Placement Rules
     CANVAS_NO_MOLECULES = "CANVAS_NO_MOLECULES",
     CANVAS_INVALID_STRUCTURE = "CANVAS_INVALID_STRUCTURE",
@@ -113,6 +126,47 @@ export const ValidationRuleMessages: Record<ValidationRuleCode, { title: string;
         title: "Radicals or Charges Detected",
         description: "The structure contains radical species or formal charges that are typically unstable.",
         suggestion: "Neutralize charges and complete radical valences for stable polymer structures."
+    },
+    
+    // Polymerizability
+    [ValidationRuleCode.RULE_P2_CROSSLINK_RISK]: {
+        title: "Crosslink Risk - Over-Functionalized",
+        description: "Too many reactive sites (>4) may cause crosslinking and form brittle networks instead of linear polymers.",
+        suggestion: "Reduce functionality for linear polymers. Remove some reactive groups to prevent gel formation."
+    },
+    
+    // Mechanical/Physical Behavior
+    [ValidationRuleCode.RULE_M1_TOO_FLEXIBLE]: {
+        title: "Low Rigidity - High Flexibility",
+        description: "Structure contains many rotatable bonds and no rigid rings. This may result in a low glass transition temperature (Tg).",
+        suggestion: "Adding aromatic or cyclic groups may increase stiffness and Tg."
+    },
+    [ValidationRuleCode.RULE_M2_TOO_BRITTLE]: {
+        title: "High Rigidity - Brittleness Risk",
+        description: "High aromatic content or many double bonds increases rigidity but may cause brittleness.",
+        suggestion: "Consider adding flexible spacers (-CH2- or ether linkages) to improve toughness."
+    },
+    [ValidationRuleCode.RULE_M3_WEAK_FORCES]: {
+        title: "Weak Intermolecular Forces",
+        description: "Lack of polar groups reduces intermolecular interactions, potentially weakening the material.",
+        suggestion: "Add -OH, -NH, or ester groups to improve strength through hydrogen bonding."
+    },
+    
+    // Sustainability
+    [ValidationRuleCode.RULE_S1_NON_DEGRADABLE]: {
+        title: "Non-Biodegradable Backbone",
+        description: "Backbone contains only C-C bonds without hydrolyzable linkages. This may limit biodegradability.",
+        suggestion: "Consider ester, amide, or carbonate linkages to enable biodegradability."
+    },
+    [ValidationRuleCode.RULE_S2_HALOGEN_WARNING]: {
+        title: "Environmental Concern - Halogens",
+        description: "Halogenated polymers are less environmentally friendly and harder to recycle.",
+        suggestion: "Consider non-halogen alternatives for greener polymer design."
+    },
+    [ValidationRuleCode.RULE_S3_HIGH_MW_UNIT]: {
+        title: "Large Repeat Unit",
+        description: "Large repeat units may hinder degradability and processing efficiency.",
+        suggestion: "Consider simplifying the monomer for better processability and degradation."
     },
     
     // Canvas/Placement
@@ -770,6 +824,594 @@ export const detectFunctionalGroups = async (smiles: string): Promise<Array<{nam
     }
     
     return results;
+};
+
+// =============================================================================
+// POLYMER PROPERTY ANALYSIS (For Optimization Rules)
+// =============================================================================
+
+/**
+ * SMARTS patterns for polymer property analysis
+ * Used for mechanical, sustainability, and polymerizability assessments
+ */
+const POLYMER_ANALYSIS_PATTERNS = {
+    // Rotatable bonds - single bonds that can freely rotate (flexibility indicator)
+    rotatable_bond: "[!$(*#*)&!D1]-&!@[!$(*#*)&!D1]",
+    
+    // Aromatic systems (rigidity indicator)
+    aromatic_ring: "c1ccccc1",
+    aromatic_atom: "[c,n,o,s]",
+    
+    // Polar groups (intermolecular force indicator)
+    h_bond_donor: "[#7,#8,#9;H]",  // N-H, O-H, F-H
+    h_bond_acceptor: "[#7,#8,#9;!H0]",  // N, O, F with lone pairs
+    hydroxyl: "[OX2H]",
+    amine: "[NX3;H2,H1]",
+    
+    // Degradable linkages (sustainability indicator)
+    ester_linkage: "[#6][CX3](=O)[OX2][#6]",
+    amide_linkage: "[NX3][CX3](=[OX1])[#6]",
+    carbonate_linkage: "[OX2][CX3](=[OX1])[OX2]",
+    urethane_linkage: "[NX3][CX3](=[OX1])[OX2]",
+    
+    // Halogens (environmental concern)
+    fluorine: "[F]",
+    chlorine: "[Cl]",
+    bromine: "[Br]",
+    iodine: "[I]",
+    any_halogen: "[F,Cl,Br,I]",
+    
+    // Unsaturation (rigidity/reactivity)
+    double_bond: "[CX3]=[CX3]",
+    triple_bond: "[CX2]#[CX2]",
+    
+    // Connection points for pSMILES
+    star_atom: "[#0]"  // [*] wildcard
+};
+
+/**
+ * Polymer analysis result containing all structural metrics
+ */
+export interface PolymerAnalysis {
+    // Structural counts
+    rotatableBonds: number;
+    aromaticAtoms: number;
+    aromaticRings: number;
+    doubleBonds: number;
+    tripleBonds: number;
+    
+    // Polar groups
+    hBondDonors: number;
+    hBondAcceptors: number;
+    hydroxylGroups: number;
+    amineGroups: number;
+    
+    // Degradable linkages
+    esterLinkages: number;
+    amideLinkages: number;
+    carbonateLinkages: number;
+    urethaneLinkages: number;
+    totalDegradableLinkages: number;
+    
+    // Halogens
+    fluorineCount: number;
+    chlorineCount: number;
+    bromineCount: number;
+    iodineCount: number;
+    totalHalogens: number;
+    
+    // Reactive sites
+    reactiveSites: number;
+    connectionPoints: number;
+    
+    // Derived metrics (computed from counts)
+    flexibilityScore: number;      // 0-100: higher = more flexible
+    rigidityScore: number;         // 0-100: higher = more rigid
+    polarityScore: number;         // 0-100: higher = more polar
+    sustainabilityScore: number;   // 0-100: higher = more sustainable
+    
+    // Molecular info
+    atomCount: number;
+    estimatedMW: number;
+}
+
+/**
+ * Count pattern matches in a SMILES string using RDKit
+ */
+const countPatternMatches = async (smiles: string, pattern: string): Promise<number> => {
+    try {
+        const rdkit = await getRDKit();
+        const mol = rdkit.get_mol(smiles);
+        
+        if (!mol) return 0;
+        
+        try {
+            const query = rdkit.get_qmol(pattern);
+            if (!query) return 0;
+            
+            try {
+                const matches = mol.get_substruct_matches(query);
+                const matchArray = JSON.parse(matches);
+                return matchArray.length;
+            } finally {
+                query.delete();
+            }
+        } finally {
+            mol.delete();
+        }
+    } catch {
+        return 0;
+    }
+};
+
+/**
+ * Comprehensive polymer structure analysis
+ * Analyzes SMILES for mechanical, sustainability, and polymerizability properties
+ * 
+ * @param smiles - SMILES string to analyze
+ * @returns PolymerAnalysis with all structural metrics
+ */
+export const analyzePolymerStructure = async (smiles: string): Promise<PolymerAnalysis> => {
+    // Count all patterns in parallel for efficiency
+    const [
+        rotatableBonds,
+        aromaticAtoms,
+        aromaticRings,
+        doubleBonds,
+        tripleBonds,
+        hBondDonors,
+        hBondAcceptors,
+        hydroxylGroups,
+        amineGroups,
+        esterLinkages,
+        amideLinkages,
+        carbonateLinkages,
+        urethaneLinkages,
+        fluorineCount,
+        chlorineCount,
+        bromineCount,
+        iodineCount,
+        connectionPoints,
+        reactiveSites
+    ] = await Promise.all([
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.rotatable_bond),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.aromatic_atom),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.aromatic_ring),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.double_bond),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.triple_bond),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.h_bond_donor),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.h_bond_acceptor),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.hydroxyl),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.amine),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.ester_linkage),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.amide_linkage),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.carbonate_linkage),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.urethane_linkage),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.fluorine),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.chlorine),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.bromine),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.iodine),
+        countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.star_atom),
+        countReactiveSites(smiles)
+    ]);
+    
+    const totalDegradableLinkages = esterLinkages + amideLinkages + carbonateLinkages + urethaneLinkages;
+    const totalHalogens = fluorineCount + chlorineCount + bromineCount + iodineCount;
+    const atomCount = countAtomsInSmiles(smiles);
+    
+    // Calculate derived scores (0-100 scale)
+    
+    // Flexibility: high rotatable bonds + low aromatics = flexible
+    // Normalize by atom count to make comparable across molecules
+    const normalizedRotatable = atomCount > 0 ? (rotatableBonds / atomCount) * 100 : 0;
+    const normalizedAromatic = atomCount > 0 ? (aromaticAtoms / atomCount) * 100 : 0;
+    const flexibilityScore = Math.min(100, Math.max(0, 
+        normalizedRotatable * 2 - normalizedAromatic
+    ));
+    
+    // Rigidity: high aromatics + double bonds = rigid
+    const rigidityScore = Math.min(100, Math.max(0,
+        normalizedAromatic + (doubleBonds / Math.max(1, atomCount)) * 50
+    ));
+    
+    // Polarity: polar groups relative to size
+    const polarGroups = hBondDonors + hBondAcceptors;
+    const polarityScore = Math.min(100, Math.max(0,
+        atomCount > 0 ? (polarGroups / atomCount) * 200 : 0
+    ));
+    
+    // Sustainability: degradable linkages, no halogens
+    // Higher score = more sustainable
+    const sustainabilityScore = Math.min(100, Math.max(0,
+        (totalDegradableLinkages > 0 ? 50 : 0) +
+        (totalHalogens === 0 ? 30 : -totalHalogens * 10) +
+        (atomCount < 50 ? 20 : 0)
+    ));
+    
+    // Estimate MW (rough approximation)
+    const estimatedMW = atomCount * 12; // Rough average atomic mass
+    
+    return {
+        rotatableBonds,
+        aromaticAtoms,
+        aromaticRings,
+        doubleBonds,
+        tripleBonds,
+        hBondDonors,
+        hBondAcceptors,
+        hydroxylGroups,
+        amineGroups,
+        esterLinkages,
+        amideLinkages,
+        carbonateLinkages,
+        urethaneLinkages,
+        totalDegradableLinkages,
+        fluorineCount,
+        chlorineCount,
+        bromineCount,
+        iodineCount,
+        totalHalogens,
+        reactiveSites,
+        connectionPoints,
+        flexibilityScore,
+        rigidityScore,
+        polarityScore,
+        sustainabilityScore,
+        atomCount,
+        estimatedMW
+    };
+};
+
+// =============================================================================
+// SMILES AUTO-REPAIR PIPELINE
+// =============================================================================
+
+/**
+ * Result of SMILES repair attempt
+ */
+export interface SmilesRepairResult {
+    success: boolean;
+    original: string;
+    repaired: string;
+    canonical: string;
+    wasModified: boolean;
+    repairSteps: string[];
+    error?: string;
+}
+
+/**
+ * Extract the largest fragment from a multi-fragment SMILES
+ * Fragments are separated by '.' in SMILES notation
+ * 
+ * @param smiles - SMILES string potentially containing fragments
+ * @returns Largest fragment by atom count
+ */
+const extractLargestFragment = (smiles: string): string => {
+    if (!smiles.includes('.')) return smiles;
+    
+    const fragments = smiles.split('.');
+    let largest = fragments[0];
+    let maxAtoms = countAtomsInSmiles(largest);
+    
+    for (let i = 1; i < fragments.length; i++) {
+        const atomCount = countAtomsInSmiles(fragments[i]);
+        if (atomCount > maxAtoms) {
+            maxAtoms = atomCount;
+            largest = fragments[i];
+        }
+    }
+    
+    return largest;
+};
+
+/**
+ * Attempt to repair ring notation issues
+ * Finds unpaired ring digits and removes them
+ * 
+ * @param smiles - SMILES string with potential ring issues  
+ * @returns Repaired SMILES or original if repair not possible
+ */
+const repairRingNotation = (smiles: string): string => {
+    // Find all ring digits used
+    const ringDigits: Map<string, number> = new Map();
+    let cleanSmiles = smiles;
+    
+    // Count occurrences of each ring digit (1-9, %10-%99)
+    // eslint-disable-next-line no-useless-escape
+    const digitPattern = /(%\d{2}|\d)(?![^\[]*\])/g;
+    const matches = smiles.match(digitPattern) || [];
+    
+    for (const digit of matches) {
+        ringDigits.set(digit, (ringDigits.get(digit) || 0) + 1);
+    }
+    
+    // Ring digits should appear in pairs - remove unpaired ones
+    ringDigits.forEach((count, digit) => {
+        if (count % 2 !== 0) {
+            // Unpaired ring digit - remove last occurrence
+            const lastIndex = cleanSmiles.lastIndexOf(digit);
+            if (lastIndex !== -1) {
+                cleanSmiles = cleanSmiles.slice(0, lastIndex) + cleanSmiles.slice(lastIndex + digit.length);
+            }
+        }
+    });
+    
+    return cleanSmiles;;
+};
+
+/**
+ * Balance parentheses in SMILES string
+ * Adds missing closing parentheses or removes excess opening ones
+ * 
+ * @param smiles - SMILES string with potential parenthesis issues
+ * @returns Repaired SMILES
+ */
+const balanceParentheses = (smiles: string): string => {
+    let openCount = 0;
+    let result = '';
+    
+    for (const char of smiles) {
+        if (char === '(') {
+            openCount++;
+            result += char;
+        } else if (char === ')') {
+            if (openCount > 0) {
+                openCount--;
+                result += char;
+            }
+            // Skip excess closing parentheses
+        } else {
+            result += char;
+        }
+    }
+    
+    // Add missing closing parentheses
+    while (openCount > 0) {
+        result += ')';
+        openCount--;
+    }
+    
+    return result;
+};
+
+/**
+ * Convert SMILES to pSMILES format by adding connection points
+ * Only if the structure doesn't already have connection points
+ * 
+ * @param smiles - SMILES string
+ * @returns pSMILES with [*] connection points
+ */
+const convertTopSMILES = (smiles: string): string => {
+    // Check if already has connection points
+    if (smiles.includes('[*]') || smiles.includes('[#0]')) {
+        return smiles;
+    }
+    
+    // Add connection points at both ends
+    return `[*]${smiles}[*]`;
+};
+
+/**
+ * Comprehensive SMILES repair pipeline
+ * Attempts multiple repair strategies in order of likelihood of success
+ * 
+ * Repair order:
+ * 1. Try direct canonicalization (fixes most issues)
+ * 2. Extract largest fragment (removes salts/counterions)
+ * 3. Balance parentheses
+ * 4. Repair ring notation
+ * 5. Try with lenient parsing
+ * 6. Convert to pSMILES format
+ * 
+ * @param smiles - Original SMILES string (potentially invalid)
+ * @returns SmilesRepairResult with original, repaired, and canonical forms
+ */
+export const repairSmiles = async (smiles: string): Promise<SmilesRepairResult> => {
+    const repairSteps: string[] = [];
+    let currentSmiles = smiles.trim();
+    
+    // Handle empty input
+    if (!currentSmiles) {
+        return {
+            success: false,
+            original: smiles,
+            repaired: '',
+            canonical: '',
+            wasModified: false,
+            repairSteps: ['Input was empty'],
+            error: 'Empty SMILES string'
+        };
+    }
+    
+    // Step 1: Try direct validation and canonicalization
+    try {
+        const rdkit = await getRDKit();
+        const mol = rdkit.get_mol(currentSmiles);
+        
+        if (mol) {
+            try {
+                const canonical = mol.get_smiles();
+                return {
+                    success: true,
+                    original: smiles,
+                    repaired: smiles,
+                    canonical,
+                    wasModified: false,
+                    repairSteps: ['Valid SMILES - canonicalized']
+                };
+            } finally {
+                mol.delete();
+            }
+        }
+    } catch {
+        // Continue to repair steps
+    }
+    
+    repairSteps.push('Original SMILES invalid - attempting repair');
+    
+    // Step 2: Extract largest fragment (removes salts, counterions)
+    if (currentSmiles.includes('.')) {
+        const largestFragment = extractLargestFragment(currentSmiles);
+        if (largestFragment !== currentSmiles) {
+            currentSmiles = largestFragment;
+            repairSteps.push('Removed disconnected fragments (salts/counterions)');
+            
+            // Try validation after fragment extraction
+            const validation = await validateSmiles(currentSmiles);
+            if (validation.isValid && validation.canonicalSmiles) {
+                return {
+                    success: true,
+                    original: smiles,
+                    repaired: currentSmiles,
+                    canonical: validation.canonicalSmiles,
+                    wasModified: true,
+                    repairSteps
+                };
+            }
+        }
+    }
+    
+    // Step 3: Balance parentheses
+    const balanced = balanceParentheses(currentSmiles);
+    if (balanced !== currentSmiles) {
+        currentSmiles = balanced;
+        repairSteps.push('Balanced parentheses');
+        
+        const validation = await validateSmiles(currentSmiles);
+        if (validation.isValid && validation.canonicalSmiles) {
+            return {
+                success: true,
+                original: smiles,
+                repaired: currentSmiles,
+                canonical: validation.canonicalSmiles,
+                wasModified: true,
+                repairSteps
+            };
+        }
+    }
+    
+    // Step 4: Repair ring notation
+    const ringRepaired = repairRingNotation(currentSmiles);
+    if (ringRepaired !== currentSmiles) {
+        currentSmiles = ringRepaired;
+        repairSteps.push('Repaired ring notation');
+        
+        const validation = await validateSmiles(currentSmiles);
+        if (validation.isValid && validation.canonicalSmiles) {
+            return {
+                success: true,
+                original: smiles,
+                repaired: currentSmiles,
+                canonical: validation.canonicalSmiles,
+                wasModified: true,
+                repairSteps
+            };
+        }
+    }
+    
+    // Step 5: Try lenient parsing (RDKit with relaxed rules)
+    try {
+        const rdkit = await getRDKit();
+        // Try parsing with sanitize=false equivalent - use details_json
+        const mol = rdkit.get_mol(currentSmiles, JSON.stringify({ sanitize: false }));
+        
+        if (mol) {
+            try {
+                // Try to get a valid SMILES even from partially parsed molecule
+                const canonical = mol.get_smiles();
+                if (canonical) {
+                    repairSteps.push('Parsed with lenient sanitization');
+                    return {
+                        success: true,
+                        original: smiles,
+                        repaired: canonical,
+                        canonical,
+                        wasModified: true,
+                        repairSteps
+                    };
+                }
+            } finally {
+                mol.delete();
+            }
+        }
+    } catch {
+        // Continue to next step
+    }
+    
+    // Step 6: Strip to just atoms (last resort)
+    // Remove all non-essential characters and try to build basic structure
+    const atomsOnly = currentSmiles.replace(/[^A-Za-z]/g, '');
+    if (atomsOnly.length > 0) {
+        const validation = await validateSmiles(atomsOnly);
+        if (validation.isValid && validation.canonicalSmiles) {
+            repairSteps.push('Stripped to atoms only (lost bond information)');
+            return {
+                success: true,
+                original: smiles,
+                repaired: atomsOnly,
+                canonical: validation.canonicalSmiles,
+                wasModified: true,
+                repairSteps
+            };
+        }
+    }
+    
+    // All repair attempts failed
+    repairSteps.push('All repair attempts failed');
+    return {
+        success: false,
+        original: smiles,
+        repaired: currentSmiles,
+        canonical: '',
+        wasModified: currentSmiles !== smiles,
+        repairSteps,
+        error: 'Could not repair SMILES to valid form'
+    };
+};
+
+/**
+ * Smart SMILES conversion that repairs and optionally converts to pSMILES
+ * Best used before validation/prediction to maximize success rate
+ * 
+ * @param smiles - Input SMILES (potentially invalid)
+ * @param options - Conversion options
+ * @returns Repaired and optionally converted SMILES
+ */
+export const smartSmilesConvert = async (
+    smiles: string,
+    options: {
+        convertTopSMILES?: boolean;
+        removeFragments?: boolean;
+    } = {}
+): Promise<SmilesRepairResult> => {
+    let result = await repairSmiles(smiles);
+    
+    if (!result.success) {
+        return result;
+    }
+    
+    let finalSmiles = result.canonical || result.repaired;
+    const additionalSteps: string[] = [];
+    
+    // Remove fragments if requested
+    if (options.removeFragments && finalSmiles.includes('.')) {
+        finalSmiles = extractLargestFragment(finalSmiles);
+        additionalSteps.push('Removed additional fragments');
+    }
+    
+    // Convert to pSMILES if requested
+    if (options.convertTopSMILES && !finalSmiles.includes('[*]')) {
+        finalSmiles = convertTopSMILES(finalSmiles);
+        additionalSteps.push('Converted to pSMILES format');
+    }
+    
+    return {
+        ...result,
+        repaired: finalSmiles,
+        canonical: finalSmiles,
+        wasModified: result.wasModified || additionalSteps.length > 0,
+        repairSteps: [...result.repairSteps, ...additionalSteps]
+    };
 };
 
 // =============================================================================

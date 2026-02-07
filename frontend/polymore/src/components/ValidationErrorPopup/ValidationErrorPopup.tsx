@@ -2,11 +2,11 @@
  * Module: ValidationErrorPopup.tsx
  * Purpose: Modal popup component for displaying detailed validation errors
  * Inputs: Array of ValidationError objects, visibility state, close callback
- * Outputs: Rendered modal with error details, descriptions, and suggestions
+ * Outputs: Rendered modal with error details, descriptions, suggestions, and auto-repair
  */
 
 import React from 'react';
-import { ValidationError, ValidationRuleCode, ValidationRuleMessages } from '../../util';
+import { ValidationError, ValidationRuleCode, ValidationRuleMessages, SmilesRepairResult } from '../../util';
 
 interface ValidationErrorPopupProps {
     /** Whether the popup is visible */
@@ -19,6 +19,12 @@ interface ValidationErrorPopupProps {
     warnings?: ValidationError[];
     /** Title for the popup */
     title?: string;
+    /** Auto-repair result if available */
+    repairResult?: SmilesRepairResult | null;
+    /** Callback to trigger auto-repair */
+    onAutoRepair?: () => void;
+    /** Whether repair is in progress */
+    isRepairing?: boolean;
 }
 
 /**
@@ -78,7 +84,10 @@ const ValidationErrorPopup: React.FC<ValidationErrorPopupProps> = ({
     onClose,
     errors,
     warnings = [],
-    title = 'Validation Failed'
+    title = 'Validation Failed',
+    repairResult,
+    onAutoRepair,
+    isRepairing = false
 }) => {
     // Press Escape to close - must be before any conditional returns
     React.useEffect(() => {
@@ -156,6 +165,98 @@ const ValidationErrorPopup: React.FC<ValidationErrorPopupProps> = ({
                             {warnings.map((warning, index) => (
                                 <ErrorCard key={`warning-${index}`} error={warning} isWarning={true} />
                             ))}
+                        </div>
+                    )}
+
+                    {/* Auto-Repair Section */}
+                    {(repairResult || onAutoRepair) && (
+                        <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+                            <h3 className="text-sm font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-3">
+                                Auto-Repair
+                            </h3>
+                            
+                            {/* Show repair result if available */}
+                            {repairResult && (
+                                <div className={`border-l-4 rounded-r-lg p-4 mb-3 ${
+                                    repairResult.success 
+                                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
+                                        : 'border-gray-500 bg-gray-50 dark:bg-gray-900/20'
+                                }`}>
+                                    <div className="flex items-start gap-3">
+                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 ${
+                                            repairResult.success 
+                                                ? 'bg-green-500 text-white' 
+                                                : 'bg-gray-500 text-white'
+                                        }`}>
+                                            {repairResult.success ? '\u2713' : '?'}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="font-semibold text-gray-900 dark:text-white">
+                                                {repairResult.success 
+                                                    ? (repairResult.wasModified ? 'Repair Successful' : 'SMILES Already Valid')
+                                                    : 'Repair Unsuccessful'}
+                                            </h4>
+                                            
+                                            {/* Repair steps */}
+                                            {repairResult.repairSteps.length > 0 && (
+                                                <ul className="text-sm text-gray-600 dark:text-gray-300 mt-1 list-disc list-inside">
+                                                    {repairResult.repairSteps.map((step, idx) => (
+                                                        <li key={idx}>{step}</li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                            
+                                            {/* Show repaired SMILES if different */}
+                                            {repairResult.success && repairResult.wasModified && (
+                                                <div className="mt-2 space-y-1">
+                                                    <div className="text-xs">
+                                                        <span className="text-gray-500 dark:text-gray-400">Original: </span>
+                                                        <code className="font-mono text-red-600 dark:text-red-400 break-all">
+                                                            {repairResult.original}
+                                                        </code>
+                                                    </div>
+                                                    <div className="text-xs">
+                                                        <span className="text-gray-500 dark:text-gray-400">Repaired: </span>
+                                                        <code className="font-mono text-green-600 dark:text-green-400 break-all">
+                                                            {repairResult.canonical || repairResult.repaired}
+                                                        </code>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            
+                                            {/* Error message if failed */}
+                                            {!repairResult.success && repairResult.error && (
+                                                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                                                    {repairResult.error}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* Auto-repair button */}
+                            {onAutoRepair && (
+                                <button
+                                    onClick={onAutoRepair}
+                                    disabled={isRepairing}
+                                    className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    {isRepairing ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                            Repairing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                            {repairResult ? 'Try Repair Again' : 'Attempt Auto-Repair'}
+                                        </>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
