@@ -11,8 +11,22 @@ import {
     SmilesValidationResponse,
     ValidatePolymerRequest,
     ValidationResponse,
+    Tier3AnalysisResult,
+    TaskSubmission,
 } from '../types/api';
 
+
+/**
+ * Get Tier 3 Analysis Results (Leaderboard).
+ */
+export const getTier3Results = async (skip = 0, limit = 100): Promise<ResponseModel<Tier3AnalysisResult[]>> => {
+    try {
+        const response = await client.get<ResponseModel<Tier3AnalysisResult[]>>(`/tier3/?skip=${skip}&limit=${limit}`);
+        return response.data;
+    } catch (error: any) {
+        throw handleApiError(error);
+    }
+};
 
 /**
  * Predict polymer properties from SMILES using heuristics (Tier 1).

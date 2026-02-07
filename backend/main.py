@@ -41,6 +41,7 @@ from core.exceptions import (
     NotFoundException,
     ServerException,
 )
+from routers import tier3
 from features.heuristics import predict_properties
 # from features.advanced_analysis import analyze_molecule_high_compute  # Moved to worker
 from schemas.analysis import AnalysisRequest, AnalysisResponse
@@ -66,6 +67,8 @@ app = FastAPI(
     description="API for polymer SMILES validation and property prediction using RDKit.",
     version="1.0.0"
 )
+
+app.include_router(tier3.router)
 
 # Startup event to initialize database
 @app.on_event("startup")

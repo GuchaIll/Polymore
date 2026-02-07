@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Trash2, Undo2, Redo2, Save, Sun, Moon, ChevronDown, FileJson, FileCode, Wand2, Move, Link2, Activity, PenTool } from 'lucide-react';
+import { Trash2, Undo2, Redo2, Save, Sun, Moon, ChevronDown, FileJson, FileCode, Wand2, Move, Link2, Activity, PenTool, Trophy } from 'lucide-react';
 
 interface ToolbarProps {
   gridSnap: boolean;
@@ -23,6 +23,7 @@ interface ToolbarProps {
   isSimulationView?: boolean;
   onResults?: () => void;
   isResultsView?: boolean;
+  onNavigateToLeaderboard?: () => void;
 }
 
 const Toolbar: React.FC<ToolbarProps> = ({
@@ -46,7 +47,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
   simulationQueueCount,
   isSimulationView = false,
   onResults,
-  isResultsView = false
+  isResultsView = false,
+  onNavigateToLeaderboard
 }) => {
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
   const [optimizeDropdownOpen, setOptimizeDropdownOpen] = useState(false);
@@ -98,13 +100,13 @@ const Toolbar: React.FC<ToolbarProps> = ({
       <div className="flex items-center gap-2">
         {/* Optimize dropdown */}
         <div className="relative" ref={optimizeDropdownRef}>
-          <button 
+          <button
             className={`${buttonClass} flex items-center gap-1.5`}
             onClick={() => setOptimizeDropdownOpen(!optimizeDropdownOpen)}
           >
             <Wand2 className="w-4 h-4" /> Optimize <ChevronDown className={`w-3 h-3 transition-transform ${optimizeDropdownOpen ? 'rotate-180' : ''}`} />
           </button>
-          
+
           {optimizeDropdownOpen && (
             <div className="absolute top-full left-0 mt-1 w-48 bg-poly-light-sidebar dark:bg-poly-sidebar border border-poly-light-border dark:border-poly-border rounded-lg shadow-lg z-50 overflow-hidden">
               <button
@@ -142,8 +144,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
           )}
         </div>
         {onValidate && (
-          <button 
-            className={`${buttonClass} ${!rdkitReady ? 'opacity-50 cursor-not-allowed' : ''}`} 
+          <button
+            className={`${buttonClass} ${!rdkitReady ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={onValidate}
             disabled={!rdkitReady}
             title={rdkitReady ? 'Validate SMILES with RDKit.js' : 'Chemistry engine loading...'}
@@ -153,21 +155,21 @@ const Toolbar: React.FC<ToolbarProps> = ({
         )}
         <button className={buttonClass} onClick={onPredict}>Predict</button>
         {/* Results page toggle button */}
-       
+
         {onSimulate && (
-          <button 
-            className={`${buttonClass} flex items-center gap-1.5 relative ${isSimulationView ? 'bg-poly-accent text-white' : ''}`} 
+          <button
+            className={`${buttonClass} flex items-center gap-1.5 relative ${isSimulationView ? 'bg-poly-accent text-white' : ''}`}
             onClick={onSimulate}
             title={isSimulationView ? 'Return to Editor' : 'Open Simulation'}
           >
             {isSimulationView ? (
               <>
-                <PenTool className="w-4 h-4" /> 
+                <PenTool className="w-4 h-4" />
                 Editor
               </>
             ) : (
               <>
-                <Activity className="w-4 h-4" /> 
+                <Activity className="w-4 h-4" />
                 Simulate
                 {simulationQueueCount !== undefined && simulationQueueCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-poly-accent text-white text-[10px] rounded-full flex items-center justify-center">
@@ -178,7 +180,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
             )}
           </button>
         )}
-         {onResults && (
+        {onResults && (
           <button
             className={`${buttonClass} flex items-center gap-1.5 ${isResultsView ? 'bg-poly-accent text-white' : ''}`}
             onClick={onResults}
@@ -200,14 +202,23 @@ const Toolbar: React.FC<ToolbarProps> = ({
       <div className="w-px h-[30px] bg-poly-light-border dark:bg-poly-border" />
 
       <div className="flex items-center gap-2">
+        {onNavigateToLeaderboard && (
+          <button
+            className={`${buttonClass} flex items-center gap-1.5`}
+            onClick={onNavigateToLeaderboard}
+            title="View Leaderboard"
+          >
+            <Trophy className="w-4 h-4 text-yellow-500" /> Leaderboard
+          </button>
+        )}
         <div className="relative" ref={exportDropdownRef}>
-          <button 
-            className={`${buttonClass} flex items-center gap-1.5`} 
+          <button
+            className={`${buttonClass} flex items-center gap-1.5`}
             onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
           >
             <Save className="w-4 h-4" /> Export <ChevronDown className={`w-3 h-3 transition-transform ${exportDropdownOpen ? 'rotate-180' : ''}`} />
           </button>
-          
+
           {exportDropdownOpen && (
             <div className="absolute top-full left-0 mt-1 w-40 bg-poly-light-sidebar dark:bg-poly-sidebar border border-poly-light-border dark:border-poly-border rounded-lg shadow-lg z-50 overflow-hidden">
               <button

@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as THREE from 'three';
 import Sidebar from '../../components/Sidebar';
 import Toolbar from '../../components/Toolbar';
@@ -9,7 +10,7 @@ import SimulationPage from '../SimulationPage';
 import ResultsPage from '../ResultsPage';
 import { usePolyForgeState } from '../../hooks/usePolyForgeState';
 import { useTheme } from '../../hooks/useTheme';
-import { Molecule, PredictedProperties } from '../../types';
+import { Molecule, PredictedProperties, SimulationTask, SimulationResult } from '../../types';
 import {
   validatePolymerComprehensive,
   predictPropertiesFromBackend,
@@ -66,8 +67,16 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
   const [repairResult, setRepairResult] = useState<SmilesRepairResult | null>(null);
   const [isRepairing, setIsRepairing] = useState(false);
   const { isDark, toggleTheme } = useTheme();
+  const navigate = useNavigate();
 
   // Simulation Queue State
+  const [simulationQueue, setSimulationQueue] = useState<SimulationTask[]>([]);
+  const [runningTask, setRunningTask] = useState<SimulationTask | null>(null);
+  const [completedTasks, setCompletedTasks] = useState<SimulationTask[]>([]);
+  const [isPaused, setIsPaused] = useState(false);
+  const simulationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingQueueAddRef = useRef<Set<string>>(new Set());
+
   const [simulationPageOpen, setSimulationPageOpen] = useState(false);
 
   // Kept for SimulationPage
@@ -244,10 +253,12 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
       showToast('Predicting properties...');
       const predictionResult = await predictPropertiesFromBackend(smilesForPrediction);
 
+
       if (predictionResult.success && predictionResult.properties) {
         // Map backend properties to our PredictedProperties format
         // Backend returns values - normalize to 0-100 scale if needed
         const p = predictionResult.properties;
+
         const normalize = (val: number | undefined, fallback: number) => {
           if (val === undefined || val === null) return fallback;
           // If value is already in 0-100 scale, use as is; otherwise multiply by 100
@@ -319,6 +330,130 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
     updateSmiles();
   }, [state.placedMolecules]);
 
+  // Add task to simulation queue (validates for duplicates)
+  const handleAddToQueue = useCallback((smiles: string, name: string): boolean => {
+    // Check synchronously if already pending addition (prevents race condition)
+    if (pendingQueueAddRef.current.has(smiles)) {
+      return false;
+    }
+
+    // Check if SMILES already in queue or running
+    const allSmiles = [
+      ...simulationQueue.map(t => t.smiles),
+      runningTask?.smiles,
+      ...completedTasks.map(t => t.smiles)
+    ].filter(Boolean);
+
+    if (allSmiles.includes(smiles)) {
+      return false; // Duplicate
+    }
+
+    // Mark as pending synchronously before async state update
+    pendingQueueAddRef.current.add(smiles);
+
+    const newTask: SimulationTask = {
+      id: `sim-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      smiles,
+      name,
+      status: 'pending',
+      createdAt: new Date(),
+      progress: 0
+    };
+
+    setSimulationQueue(prev => {
+      // Clear from pending ref once state is updated
+      pendingQueueAddRef.current.delete(smiles);
+      return [...prev, newTask];
+    });
+    showToast('Added to simulation queue');
+    return true;
+  }, [simulationQueue, runningTask, completedTasks, showToast]);
+
+  // Remove task from queue
+  const handleRemoveFromQueue = useCallback((taskId: string) => {
+    setSimulationQueue(prev => prev.filter(t => t.id !== taskId));
+    setCompletedTasks(prev => prev.filter(t => t.id !== taskId));
+  }, []);
+
+  // Clear all completed tasks
+  const handleClearCompleted = useCallback(() => {
+    setCompletedTasks([]);
+  }, []);
+
+  // Toggle pause state
+  const handleTogglePause = useCallback(() => {
+    setIsPaused(prev => !prev);
+  }, []);
+
+  // Mock simulation runner - processes queue one at a time
+  useEffect(() => {
+    // If paused, running, or empty queue, do nothing
+    if (isPaused || runningTask || simulationQueue.length === 0) {
+      return;
+    }
+
+    // Start processing the first task in queue
+    const nextTask = simulationQueue[0];
+    setSimulationQueue(prev => prev.slice(1));
+    setRunningTask({ ...nextTask, status: 'running', startedAt: new Date() });
+  }, [isPaused, runningTask, simulationQueue]);
+
+  // Simulate progress for running task (mock simulation)
+  useEffect(() => {
+    if (!runningTask || isPaused) {
+      if (simulationIntervalRef.current) {
+        clearInterval(simulationIntervalRef.current);
+        simulationIntervalRef.current = null;
+      }
+      return;
+    }
+
+    simulationIntervalRef.current = setInterval(() => {
+      setRunningTask(prev => {
+        if (!prev) return null;
+
+        const newProgress = Math.min(prev.progress + Math.random() * 15 + 5, 100);
+
+        if (newProgress >= 100) {
+          // First transition to processing status
+          if (prev.status === 'running') {
+            return { ...prev, status: 'processing', progress: 100 };
+          }
+
+          // Then complete with results (simulates API response)
+          const completedTask: SimulationTask = {
+            ...prev,
+            status: 'completed',
+            progress: 100,
+            completedAt: new Date(),
+            result: {
+              predictedProperties: {
+                strength: Math.random() * 0.4 + 0.5,
+                flexibility: Math.random() * 0.4 + 0.3,
+                degradability: Math.random() * 0.5 + 0.2,
+                sustainability: Math.random() * 0.4 + 0.4
+              },
+              simulationTime: Date.now() - prev.startedAt!.getTime(),
+              iterations: Math.floor(Math.random() * 500 + 200),
+              convergenceScore: Math.random() * 0.2 + 0.8
+            } as SimulationResult
+          };
+
+          setCompletedTasks(prevCompleted => [completedTask, ...prevCompleted]);
+          return null; // Clear running task
+        }
+
+        return { ...prev, progress: Math.round(newProgress) };
+      });
+    }, 500);
+
+    return () => {
+      if (simulationIntervalRef.current) {
+        clearInterval(simulationIntervalRef.current);
+        simulationIntervalRef.current = null;
+      }
+    };
+  }, [runningTask, isPaused]);
   const handleImportSmiles = useCallback(async (smiles: string) => {
     if (!rdkitReady) {
       showToast('Chemistry engine loading...');
@@ -414,6 +549,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
               setSimulationPageOpen(false);
             }}
             isResultsView={resultsPageOpen}
+            onNavigateToLeaderboard={() => navigate('/leaderboard')}
           />
         )}
 

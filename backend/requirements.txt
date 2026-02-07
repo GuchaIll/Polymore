@@ -6,6 +6,6 @@ psycopg2-binary==2.9.10
 alembic==1.14.0
 celery[redis]==5.4.0
 redis==5.2.1
-rdkit==2024.3.6
+rdkit
 httpx==0.28.1
 pytest==8.3.4
