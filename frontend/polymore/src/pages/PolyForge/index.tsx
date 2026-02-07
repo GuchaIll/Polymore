@@ -1,13 +1,15 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import Sidebar from '../../components/Sidebar';
 import Toolbar from '../../components/Toolbar';
 import Canvas3D from '../../components/Canvas3D';
 import PropertiesPanel from '../../components/PropertiesPanel';
 import ValidationErrorPopup from '../../components/ValidationErrorPopup';
+import SimulationPage from '../SimulationPage';
+import ResultsPage from '../ResultsPage';
 import { usePolyForgeState } from '../../hooks/usePolyForgeState';
 import { useTheme } from '../../hooks/useTheme';
-import { Molecule, PredictedProperties } from '../../types';
+import { Molecule, PredictedProperties, SimulationTask, SimulationResult } from '../../types';
 import { 
   validatePolymerComprehensive,
   predictPropertiesFromBackend,
@@ -57,11 +59,22 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
   const [draggedMolecule, setDraggedMolecule] = useState<Molecule | null>(null);
   const [predictedProperties, setPredictedProperties] = useState<PredictedProperties | null>(null);
   const [validationResult, setValidationResult] = useState<PolymerValidationResult | null>(null);
+  // Results page state
+  const [resultsPageOpen, setResultsPageOpen] = useState(false);
   const [showValidationPopup, setShowValidationPopup] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [repairResult, setRepairResult] = useState<SmilesRepairResult | null>(null);
   const [isRepairing, setIsRepairing] = useState(false);
   const { isDark, toggleTheme } = useTheme();
+
+  // Simulation Queue State
+  const [simulationPageOpen, setSimulationPageOpen] = useState(false);
+  const [simulationQueue, setSimulationQueue] = useState<SimulationTask[]>([]);
+  const [runningTask, setRunningTask] = useState<SimulationTask | null>(null);
+  const [completedTasks, setCompletedTasks] = useState<SimulationTask[]>([]);
+  const [isPaused, setIsPaused] = useState(false);
+  const [currentSmiles, setCurrentSmiles] = useState('');
+  const simulationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleDragStart = useCallback((molecule: Molecule) => {
     setDraggedMolecule(molecule);
@@ -287,6 +300,131 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
     }
   }, [state.placedMolecules, showToast]);
 
+  // Update current SMILES when molecules change
+  useEffect(() => {
+    const updateSmiles = async () => {
+      if (state.placedMolecules.length > 0) {
+        try {
+          const smiles = await generateSmiles(state.placedMolecules);
+          setCurrentSmiles(smiles || '');
+        } catch {
+          setCurrentSmiles('');
+        }
+      } else {
+        setCurrentSmiles('');
+      }
+    };
+    updateSmiles();
+  }, [state.placedMolecules]);
+
+  // Add task to simulation queue (validates for duplicates)
+  const handleAddToQueue = useCallback((smiles: string, name: string): boolean => {
+    // Check if SMILES already in queue or running
+    const allSmiles = [
+      ...simulationQueue.map(t => t.smiles),
+      runningTask?.smiles,
+      ...completedTasks.map(t => t.smiles)
+    ].filter(Boolean);
+
+    if (allSmiles.includes(smiles)) {
+      return false; // Duplicate
+    }
+
+    const newTask: SimulationTask = {
+      id: `sim-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      smiles,
+      name,
+      status: 'pending',
+      createdAt: new Date(),
+      progress: 0
+    };
+
+    setSimulationQueue(prev => [...prev, newTask]);
+    showToast('Added to simulation queue');
+    return true;
+  }, [simulationQueue, runningTask, completedTasks, showToast]);
+
+  // Remove task from queue
+  const handleRemoveFromQueue = useCallback((taskId: string) => {
+    setSimulationQueue(prev => prev.filter(t => t.id !== taskId));
+    setCompletedTasks(prev => prev.filter(t => t.id !== taskId));
+  }, []);
+
+  // Clear all completed tasks
+  const handleClearCompleted = useCallback(() => {
+    setCompletedTasks([]);
+  }, []);
+
+  // Toggle pause state
+  const handleTogglePause = useCallback(() => {
+    setIsPaused(prev => !prev);
+  }, []);
+
+  // Mock simulation runner - processes queue one at a time
+  useEffect(() => {
+    // If paused, running, or empty queue, do nothing
+    if (isPaused || runningTask || simulationQueue.length === 0) {
+      return;
+    }
+
+    // Start processing the first task in queue
+    const nextTask = simulationQueue[0];
+    setSimulationQueue(prev => prev.slice(1));
+    setRunningTask({ ...nextTask, status: 'running', startedAt: new Date() });
+  }, [isPaused, runningTask, simulationQueue]);
+
+  // Simulate progress for running task (mock simulation)
+  useEffect(() => {
+    if (!runningTask || isPaused) {
+      if (simulationIntervalRef.current) {
+        clearInterval(simulationIntervalRef.current);
+        simulationIntervalRef.current = null;
+      }
+      return;
+    }
+
+    simulationIntervalRef.current = setInterval(() => {
+      setRunningTask(prev => {
+        if (!prev) return null;
+
+        const newProgress = Math.min(prev.progress + Math.random() * 15 + 5, 100);
+        
+        if (newProgress >= 100) {
+          // Task completed - generate mock results
+          const completedTask: SimulationTask = {
+            ...prev,
+            status: 'completed',
+            progress: 100,
+            completedAt: new Date(),
+            result: {
+              predictedProperties: {
+                strength: Math.random() * 0.4 + 0.5,
+                flexibility: Math.random() * 0.4 + 0.3,
+                degradability: Math.random() * 0.5 + 0.2,
+                sustainability: Math.random() * 0.4 + 0.4
+              },
+              simulationTime: Date.now() - prev.startedAt!.getTime(),
+              iterations: Math.floor(Math.random() * 500 + 200),
+              convergenceScore: Math.random() * 0.2 + 0.8
+            } as SimulationResult
+          };
+
+          setCompletedTasks(prevCompleted => [completedTask, ...prevCompleted]);
+          return null; // Clear running task
+        }
+
+        return { ...prev, progress: Math.round(newProgress) };
+      });
+    }, 500);
+
+    return () => {
+      if (simulationIntervalRef.current) {
+        clearInterval(simulationIntervalRef.current);
+        simulationIntervalRef.current = null;
+      }
+    };
+  }, [runningTask, isPaused]);
+
   const handleImportSmiles = useCallback(async (smiles: string) => {
     if (!rdkitReady) {
       showToast('Chemistry engine loading...');
@@ -369,33 +507,109 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
           onExportSMILES={exportAsSMILES}
           onToggleTheme={toggleTheme}
           onValidate={handleValidate}
+          onSimulate={() => {
+            setSimulationPageOpen(prev => !prev);
+            setResultsPageOpen(false);
+          }}
           rdkitReady={rdkitReady}
+          simulationQueueCount={simulationQueue.length + (runningTask ? 1 : 0)}
+          isSimulationView={simulationPageOpen}
+          onResults={() => {
+            setResultsPageOpen(prev => !prev);
+            setSimulationPageOpen(false);
+          }}
+          isResultsView={resultsPageOpen}
         />
 
-        <Canvas3D
-          molecules={state.placedMolecules}
-          viewMode={state.viewMode}
-          tool={state.tool}
-          selectedObject={state.selectedObject}
-          connectStart={state.connectStart}
-          movingMoleculeId={state.movingMoleculeId}
-          draggedMolecule={draggedMolecule}
-          toast={toast}
-          isDark={isDark}
-          onMoleculeClick={handleMoleculeClick}
-          onPlaneClick={handlePlaneClick}
-          onPointerMove={handlePointerMove}
-          onDrop={handleDrop}
-          onViewModeChange={setViewMode}
-          onResetCamera={handleResetCamera}
-        />
+        {/* Conditionally render Editor, Simulation, or Results Page */}
+        {simulationPageOpen ? (
+          <SimulationPage
+            isOpen={simulationPageOpen}
+            currentSmiles={currentSmiles}
+            currentName={state.placedMolecules.length > 0 
+              ? `Polymer (${state.placedMolecules.length} units)` 
+              : 'Unnamed'}
+            queue={simulationQueue}
+            runningTask={runningTask}
+            completedTasks={completedTasks}
+            onAddToQueue={handleAddToQueue}
+            onRemoveFromQueue={handleRemoveFromQueue}
+            onClearCompleted={handleClearCompleted}
+            isPaused={isPaused}
+            onTogglePause={handleTogglePause}
+            onAutoQueueAttempted={(_success: boolean, message: string) => showToast(message)}
+          />
+        ) : resultsPageOpen ? (
+          <>
+            {/* ResultsPage integration */}
+            {/* TODO: Map predictedProperties and mock applications to ResultsPage props */}
+            <ResultsPage
+              properties={{
+                strength: predictedProperties?.strength ?? 80,
+                elasticity: 0,
+                thermal: 0,
+                flexibility: predictedProperties?.flexibility ?? 60,
+                ecoScore: 0,
+                biodegradable: 0,
+                degradability: predictedProperties?.degradability ?? 40,
+                sustainability: predictedProperties?.sustainability ?? 55,
+              }}
+              applications={[
+                {
+                  name: 'Biodegradable Packaging',
+                  description: 'Eco-friendly packaging for food and retail.',
+                  suitability: 85,
+                  icon: <span role="img" aria-label="package">📦</span>,
+                },
+                {
+                  name: 'Medical Devices',
+                  description: 'Flexible, strong, and safe for medical use.',
+                  suitability: 70,
+                  icon: <span role="img" aria-label="medical">🩺</span>,
+                },
+                {
+                  name: 'Textiles',
+                  description: 'Durable and sustainable fibers for clothing.',
+                  suitability: 65,
+                  icon: <span role="img" aria-label="textile">👕</span>,
+                },
+                {
+                  name: 'Automotive Parts',
+                  description: 'High-strength, lightweight components.',
+                  suitability: 60,
+                  icon: <span role="img" aria-label="car">🚗</span>,
+                },
+              ]}
+            />
+          </>
+        ) : (
+          <>
+            <Canvas3D
+              molecules={state.placedMolecules}
+              viewMode={state.viewMode}
+              tool={state.tool}
+              selectedObject={state.selectedObject}
+              connectStart={state.connectStart}
+              movingMoleculeId={state.movingMoleculeId}
+              draggedMolecule={draggedMolecule}
+              toast={toast}
+              isDark={isDark}
+              onMoleculeClick={handleMoleculeClick}
+              onPlaneClick={handlePlaneClick}
+              onPointerMove={handlePointerMove}
+              onDrop={handleDrop}
+              onViewModeChange={setViewMode}
+              onResetCamera={handleResetCamera}
+            />
 
-        <PropertiesPanel
-          molecules={state.placedMolecules}
-          properties={predictedProperties}
-          validationResult={validationResult}
-          onRemoveMolecule={removeMolecule}
-        />
+            <PropertiesPanel
+              molecules={state.placedMolecules}
+              properties={predictedProperties}
+              validationResult={validationResult}
+              onRemoveMolecule={removeMolecule}
+            />
+          </>
+        )}
       </div>
 
       {/* Validation Error Popup */}

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Trash2, Undo2, Redo2, Save, Sun, Moon, ChevronDown, FileJson, FileCode, Wand2, Move, Link2 } from 'lucide-react';
+import { Trash2, Undo2, Redo2, Save, Sun, Moon, ChevronDown, FileJson, FileCode, Wand2, Move, Link2, Activity, PenTool } from 'lucide-react';
 
 interface ToolbarProps {
   gridSnap: boolean;
@@ -17,7 +17,12 @@ interface ToolbarProps {
   onExportSMILES?: () => void;
   onToggleTheme: () => void;
   onValidate?: () => void;
+  onSimulate?: () => void;
   rdkitReady?: boolean;
+  simulationQueueCount?: number;
+  isSimulationView?: boolean;
+  onResults?: () => void;
+  isResultsView?: boolean;
 }
 
 const Toolbar: React.FC<ToolbarProps> = ({
@@ -36,7 +41,12 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onExportSMILES,
   onToggleTheme,
   onValidate,
-  rdkitReady = false
+  onSimulate,
+  rdkitReady = false,
+  simulationQueueCount,
+  isSimulationView = false,
+  onResults,
+  isResultsView = false
 }) => {
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
   const [optimizeDropdownOpen, setOptimizeDropdownOpen] = useState(false);
@@ -142,6 +152,48 @@ const Toolbar: React.FC<ToolbarProps> = ({
           </button>
         )}
         <button className={buttonClass} onClick={onPredict}>Predict</button>
+        {/* Results page toggle button */}
+        {onResults && (
+          <button
+            className={`${buttonClass} flex items-center gap-1.5 ${isResultsView ? 'bg-poly-accent text-white' : ''}`}
+            onClick={onResults}
+            title={isResultsView ? 'Return to Editor' : 'View Results'}
+          >
+            {isResultsView ? (
+              <>
+                <PenTool className="w-4 h-4" /> Editor
+              </>
+            ) : (
+              <>
+                <Activity className="w-4 h-4" /> Results
+              </>
+            )}
+          </button>
+        )}
+        {onSimulate && (
+          <button 
+            className={`${buttonClass} flex items-center gap-1.5 relative ${isSimulationView ? 'bg-poly-accent text-white' : ''}`} 
+            onClick={onSimulate}
+            title={isSimulationView ? 'Return to Editor' : 'Open Simulation'}
+          >
+            {isSimulationView ? (
+              <>
+                <PenTool className="w-4 h-4" /> 
+                Editor
+              </>
+            ) : (
+              <>
+                <Activity className="w-4 h-4" /> 
+                Simulate
+                {simulationQueueCount !== undefined && simulationQueueCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-poly-accent text-white text-[10px] rounded-full flex items-center justify-center">
+                    {simulationQueueCount > 9 ? '9+' : simulationQueueCount}
+                  </span>
+                )}
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       <div className="w-px h-[30px] bg-poly-light-border dark:bg-poly-border" />

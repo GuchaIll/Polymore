@@ -85,3 +85,29 @@ export type ViewMode = 'both' | 'structure' | 'volume';
         conjugationHandles: Molecule[];
     }
 
+
+// Simulation Queue Types
+export type SimulationStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface SimulationTask {
+    id: string;
+    smiles: string;
+    name: string; // User-friendly name or auto-generated
+    status: SimulationStatus;
+    createdAt: Date;
+    startedAt?: Date;
+    completedAt?: Date;
+    progress: number; // 0-100
+    result?: SimulationResult;
+    error?: string;
+}
+
+export interface SimulationResult {
+    // Predicted properties from simulation
+    predictedProperties: PredictedProperties;
+    // Simulation metadata
+    simulationTime: number; // ms
+    iterations: number;
+    convergenceScore: number;
+}
+
