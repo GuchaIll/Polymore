@@ -77,7 +77,7 @@
   }
 
   .tool-btn.active {
-    @apply border-poly-danger bg-poly-danger;
+    @apply border-poly-accent bg-cyan-900;
   }
 
   .toolbar-btn {
@@ -89,7 +89,7 @@
   }
 
   .toolbar-btn.danger:hover {
-    @apply bg-poly-danger;
+    @apply bg-amber-600;
   }
 
   .view-btn {
@@ -101,7 +101,7 @@
   }
 
   .view-btn.active {
-    @apply border-poly-danger bg-poly-danger;
+    @apply border-poly-accent bg-cyan-900;
   }
 
   .molecule-card {
@@ -109,7 +109,7 @@
   }
 
   .molecule-card:hover {
-    @apply border-poly-accent -translate-y-0.5 shadow-lg shadow-poly-accent/30;
+    @apply border-cyan-400 -translate-y-0.5 shadow-lg shadow-cyan-400/30;
   }
 
   .molecule-card:active {
@@ -129,18 +129,18 @@
   }
 
   .property-fill.strength {
-    background: linear-gradient(90deg, #ff6b6b, #ee5a6f);
+    background: linear-gradient(90deg, #22d3ee, #06b6d4);
   }
 
   .property-fill.flexibility {
-    background: linear-gradient(90deg, #4ecdc4, #44a08d);
+    background: linear-gradient(90deg, #2dd4bf, #14b8a6);
   }
 
   .property-fill.degradability {
-    background: linear-gradient(90deg, #95e1d3, #38ada9);
+    background: linear-gradient(90deg, #34d399, #10b981);
   }
 
   .property-fill.sustainability {
-    background: linear-gradient(90deg, #a8e6cf, #56ab2f);
+    background: linear-gradient(90deg, #a3e635, #84cc16);
   }
 }

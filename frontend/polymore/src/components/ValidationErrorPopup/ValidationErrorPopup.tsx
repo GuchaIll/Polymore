@@ -38,7 +38,7 @@ const getSeverityColor = (code: ValidationRuleCode): string => {
         ValidationRuleCode.RULE_3_RING_CLOSURE,
         ValidationRuleCode.RULE_4_INVALID_SYNTAX
     ].includes(code)) {
-        return 'border-red-500 bg-red-50 dark:bg-red-900/20';
+        return 'border-amber-500 bg-amber-50 dark:bg-amber-900/20';
     }
     // Layer 2 errors are important
     if ([
@@ -118,7 +118,7 @@ const ValidationErrorPopup: React.FC<ValidationErrorPopupProps> = ({
         >
             <div className="bg-white dark:bg-poly-card max-w-2xl w-full mx-4 rounded-xl shadow-2xl max-h-[80vh] overflow-hidden flex flex-col animate-fadeIn">
                 {/* Header */}
-                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-red-500 text-white">
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-cyan-800 flex items-center justify-between bg-amber-500 text-white">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-lg font-bold">
                             !
@@ -147,7 +147,7 @@ const ValidationErrorPopup: React.FC<ValidationErrorPopupProps> = ({
                     {/* Errors */}
                     {errors.length > 0 && (
                         <div className="space-y-3">
-                            <h3 className="text-sm font-semibold text-red-600 dark:text-red-400 uppercase tracking-wide">
+                            <h3 className="text-sm font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
                                 Errors (Must Fix)
                             </h3>
                             {errors.map((error, index) => (
@@ -211,7 +211,7 @@ const ValidationErrorPopup: React.FC<ValidationErrorPopupProps> = ({
                                                 <div className="mt-2 space-y-1">
                                                     <div className="text-xs">
                                                         <span className="text-gray-500 dark:text-gray-400">Original: </span>
-                                                        <code className="font-mono text-red-600 dark:text-red-400 break-all">
+                                                        <code className="font-mono text-amber-600 dark:text-amber-400 break-all">
                                                             {repairResult.original}
                                                         </code>
                                                     </div>
@@ -291,7 +291,7 @@ const ErrorCard: React.FC<{ error: ValidationError; isWarning: boolean }> = ({ e
         ? 'bg-yellow-500' 
         : error.code.startsWith('RULE_1') || error.code.startsWith('RULE_2') || 
           error.code.startsWith('RULE_3') || error.code.startsWith('RULE_4') 
-          ? 'bg-red-500' 
+          ? 'bg-amber-500' 
           : 'bg-orange-500';
 
     return (

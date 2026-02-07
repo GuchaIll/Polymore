@@ -70,7 +70,7 @@ const MoleculeCard: React.FC<MoleculeCardProps> = ({
         {molecule.icon}
       </div>
       <div className="text-poly-light-text dark:text-white text-sm font-semibold mb-1 truncate">{molecule.name}</div>
-      <div className="text-poly-light-muted dark:text-gray-500 text-xs">{molecule.formula}</div>
+      <div className="text-poly-light-muted dark:text-poly-muted text-xs">{molecule.formula}</div>
       
       {/* Extended info tooltip - rendered via portal to escape overflow */}
       {showTooltip && hasExtendedInfo && createPortal(

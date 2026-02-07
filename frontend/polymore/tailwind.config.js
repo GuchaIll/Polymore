@@ -7,12 +7,15 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Dark mode colors
-        'poly-bg': '#1a1a2e',
-        'poly-sidebar': '#16213e',
-        'poly-border': '#0f3460',
-        'poly-accent': '#e94560',
-        'poly-danger': '#ff6b6b',
+        // Dark mode colors - cyan panels, black/gray editor
+        'poly-bg': '#0a0a0c',
+        'poly-sidebar': '#0c2a2a',
+        'poly-card': '#0f3d3d',
+        'poly-border': '#1a5555',
+        'poly-accent': '#22d3ee',
+        'poly-danger': '#f59e0b',
+        'poly-text': '#ffffff',
+        'poly-muted': '#a1a1aa',
         // Light mode colors
         'poly-light-bg': '#f8fafb',
         'poly-light-sidebar': '#ffffff',

@@ -493,7 +493,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
       {/* RDKit.js error indicator */}
       {rdkitError && (
         <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-50 
-                        bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
+                        bg-amber-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
           {rdkitError}
         </div>
       )}
@@ -581,25 +581,25 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
                   name: 'Biodegradable Packaging',
                   description: 'Eco-friendly packaging for food and retail.',
                   suitability: 85,
-                  icon: <span role="img" aria-label="package">📦</span>,
+                  icon: <span role="img" aria-label="package"></span>,
                 },
                 {
                   name: 'Medical Devices',
                   description: 'Flexible, strong, and safe for medical use.',
                   suitability: 70,
-                  icon: <span role="img" aria-label="medical">🩺</span>,
+                  icon: <span role="img" aria-label="medical"></span>,
                 },
                 {
                   name: 'Textiles',
                   description: 'Durable and sustainable fibers for clothing.',
                   suitability: 65,
-                  icon: <span role="img" aria-label="textile">👕</span>,
+                  icon: <span role="img" aria-label="textile"></span>,
                 },
                 {
                   name: 'Automotive Parts',
                   description: 'High-strength, lightweight components.',
                   suitability: 60,
-                  icon: <span role="img" aria-label="car">🚗</span>,
+                  icon: <span role="img" aria-label="car"></span>,
                 },
               ]}
             />

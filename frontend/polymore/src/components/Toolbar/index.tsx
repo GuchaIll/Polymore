@@ -87,7 +87,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
       <div className="w-px h-[30px] bg-poly-light-border dark:bg-poly-border" />
 
       <div className="flex items-center gap-2">
-        <span className="text-poly-light-muted dark:text-gray-500 text-xs">Grid Snap:</span>
+        <span className="text-poly-light-muted dark:text-poly-muted text-xs">Grid Snap:</span>
         <button className={buttonClass} onClick={onToggleSnap}>
           {gridSnap ? 'ON' : 'OFF'}
         </button>
@@ -153,23 +153,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
         )}
         <button className={buttonClass} onClick={onPredict}>Predict</button>
         {/* Results page toggle button */}
-        {onResults && (
-          <button
-            className={`${buttonClass} flex items-center gap-1.5 ${isResultsView ? 'bg-poly-accent text-white' : ''}`}
-            onClick={onResults}
-            title={isResultsView ? 'Return to Editor' : 'View Results'}
-          >
-            {isResultsView ? (
-              <>
-                <PenTool className="w-4 h-4" /> Editor
-              </>
-            ) : (
-              <>
-                <Activity className="w-4 h-4" /> Results
-              </>
-            )}
-          </button>
-        )}
+       
         {onSimulate && (
           <button 
             className={`${buttonClass} flex items-center gap-1.5 relative ${isSimulationView ? 'bg-poly-accent text-white' : ''}`} 
@@ -190,6 +174,23 @@ const Toolbar: React.FC<ToolbarProps> = ({
                     {simulationQueueCount > 9 ? '9+' : simulationQueueCount}
                   </span>
                 )}
+              </>
+            )}
+          </button>
+        )}
+         {onResults && (
+          <button
+            className={`${buttonClass} flex items-center gap-1.5 ${isResultsView ? 'bg-poly-accent text-white' : ''}`}
+            onClick={onResults}
+            title={isResultsView ? 'Return to Editor' : 'View Results'}
+          >
+            {isResultsView ? (
+              <>
+                <PenTool className="w-4 h-4" /> Editor
+              </>
+            ) : (
+              <>
+                <Activity className="w-4 h-4" /> Results
               </>
             )}
           </button>

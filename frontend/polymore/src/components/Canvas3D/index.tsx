@@ -64,6 +64,7 @@ interface Molecule3DProps {
   isSelected: boolean;
   isHighlighted: boolean;
   isHovered: boolean;
+  isDark: boolean;
   onClick: (e: ThreeEvent<MouseEvent>) => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
@@ -74,6 +75,7 @@ const Molecule3D: React.FC<Molecule3DProps> = ({
   isSelected, 
   isHighlighted, 
   isHovered,
+  isDark,
   onClick,
   onPointerEnter,
   onPointerLeave 
@@ -124,8 +126,10 @@ const Molecule3D: React.FC<Molecule3DProps> = ({
         <div 
           className="flex items-center gap-1 text-xs font-medium text-center"
           style={{ 
-            color: '#1a1a2e',
-            textShadow: '0 0 3px rgba(255,255,255,0.8)',
+            color: isDark ? '#ffffff' : '#1a1a2e',
+            textShadow: isDark 
+              ? '0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6)' 
+              : '0 0 3px rgba(255,255,255,0.8)',
             maxWidth: '100px',
             wordWrap: 'break-word',
             whiteSpace: 'normal'
@@ -259,6 +263,7 @@ interface SceneContentProps {
   connectStart: number | null;
   movingMoleculeId: number | null;
   hoveredMoleculeId: number | null;
+  isDark: boolean;
   onMoleculeClick: (id: number) => void;
   onPlaneClick: (intersection: THREE.Vector3) => void;
   onPointerMove: (intersection: THREE.Vector3) => void;
@@ -285,6 +290,7 @@ const SceneContent: React.FC<SceneContentProps> = ({
   connectStart,
   movingMoleculeId,
   hoveredMoleculeId,
+  isDark,
   onMoleculeClick,
   onPlaneClick,
   onPointerMove,
@@ -331,10 +337,10 @@ const SceneContent: React.FC<SceneContentProps> = ({
         args={[20, 20]}
         cellSize={2}
         cellThickness={1}
-        cellColor="#0f3460"
+        cellColor={isDark ? '#5a5a5a' : '#10b981'}
         sectionSize={10}
         sectionThickness={1.5}
-        sectionColor="#0f3460"
+        sectionColor={isDark ? '#6a6a6a' : '#10b981'}
         fadeDistance={50}
         fadeStrength={1}
         followCamera={false}
@@ -355,6 +361,7 @@ const SceneContent: React.FC<SceneContentProps> = ({
           isSelected={selectedObject === mol.id}
           isHighlighted={connectStart === mol.id || movingMoleculeId === mol.id}
           isHovered={hoveredMoleculeId === mol.id}
+          isDark={isDark}
           onClick={(e) => {
             e.stopPropagation();
             onMoleculeClick(mol.id);
@@ -496,7 +503,7 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
         <Canvas
           camera={{ position: [15, 15, 15], fov: 60 }}
           style={{ 
-            background: isDark ? '#0a0a1a' : '#f8fafb',
+            background: isDark ? '#0a0a0c' : '#f8fafb',
             transition: 'background 0.3s ease-in-out'
           }}
         >
@@ -508,6 +515,7 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
             connectStart={connectStart}
             movingMoleculeId={movingMoleculeId}
             hoveredMoleculeId={hoveredMoleculeId}
+            isDark={isDark}
             onMoleculeClick={onMoleculeClick}
             onPlaneClick={onPlaneClick}
             onPointerMove={onPointerMove}
@@ -522,7 +530,7 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
         className="absolute inset-0 pointer-events-none opacity-50 transition-opacity duration-300"
         style={{
           backgroundImage: isDark 
-            ? 'linear-gradient(rgba(102, 126, 234, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(102, 126, 234, 0.1) 1px, transparent 1px)'
+            ? 'linear-gradient(rgba(160, 160, 160, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(160, 160, 160, 0.1) 1px, transparent 1px)'
             : 'linear-gradient(rgba(16, 185, 129, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(16, 185, 129, 0.1) 1px, transparent 1px)',
           backgroundSize: '50px 50px'
         }}

@@ -102,7 +102,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 w-full py-2 px-3 border-2 rounded-lg cursor-pointer transition-all text-sm
                 flex items-center justify-center gap-2
                 ${!smilesInput.trim() || !rdkitReady
-                  ? 'opacity-50 cursor-not-allowed border-poly-light-border dark:border-poly-border bg-poly-light-bg dark:bg-poly-bg text-poly-light-muted dark:text-gray-500'
+                  ? 'opacity-50 cursor-not-allowed border-poly-light-border dark:border-poly-border bg-poly-light-bg dark:bg-poly-bg text-poly-light-muted dark:text-poly-muted'
                   : 'border-poly-light-accent dark:border-poly-accent bg-poly-light-accent dark:bg-poly-accent text-white hover:bg-emerald-600 dark:hover:bg-indigo-600'
                 }
               `}

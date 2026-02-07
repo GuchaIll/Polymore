@@ -36,17 +36,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       </h3>
 
       <div className="flex justify-between items-center mb-2">
-        <span className="text-poly-light-muted dark:text-gray-500 text-sm">Total Atoms</span>
+        <span className="text-poly-light-muted dark:text-poly-muted text-sm">Total Atoms</span>
         <span className="text-poly-light-text dark:text-white font-semibold">{totalAtoms}</span>
       </div>
 
       <div className="flex justify-between items-center mb-2">
-        <span className="text-poly-light-muted dark:text-gray-500 text-sm">Total Bonds</span>
+        <span className="text-poly-light-muted dark:text-poly-muted text-sm">Total Bonds</span>
         <span className="text-poly-light-text dark:text-white font-semibold">{Math.floor(totalBonds)}</span>
       </div>
 
       <div className="flex justify-between items-center mb-4">
-        <span className="text-poly-light-muted dark:text-gray-500 text-sm">Molecular Weight</span>
+        <span className="text-poly-light-muted dark:text-poly-muted text-sm">Molecular Weight</span>
         <span className="text-poly-light-text dark:text-white font-semibold">{totalWeight.toFixed(1)} g/mol</span>
       </div>
 
@@ -54,10 +54,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       {validationResult && (
         <div className="mb-4 p-2 rounded-md bg-poly-light-bg dark:bg-poly-bg border border-poly-light-border dark:border-poly-border">
           <div className="flex items-center gap-2 mb-1">
-            <span className={`text-sm font-semibold ${validationResult.isValid ? 'text-green-500' : 'text-red-500'}`}>
+            <span className={`text-sm font-semibold ${validationResult.isValid ? 'text-emerald-400' : 'text-amber-400'}`}>
               {validationResult.isValid ? 'Valid' : 'Invalid'}
             </span>
-            <span className="text-xs text-poly-light-muted dark:text-gray-500">
+            <span className="text-xs text-poly-light-muted dark:text-poly-muted">
               {validationResult.polymerType}
             </span>
           </div>
@@ -69,12 +69,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </div>
           )}
           {validationResult.molecularWeight && (
-            <div className="text-xs text-poly-light-muted dark:text-gray-500">
+            <div className="text-xs text-poly-light-muted dark:text-poly-muted">
               MW: {validationResult.molecularWeight.toFixed(2)}
             </div>
           )}
           {validationResult.errors && validationResult.errors.length > 0 && (
-            <div className="text-xs text-red-400 mt-1">
+            <div className="text-xs text-amber-400 mt-1">
               {validationResult.errors.slice(0, 2).map(e => e.message).join('; ')}
             </div>
           )}
@@ -89,7 +89,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       {/* Predicted Properties */}
       <div className="mt-4">
         <div className="flex justify-between items-center">
-          <span className="text-poly-light-muted dark:text-gray-500 text-sm">Strength</span>
+          <span className="text-poly-light-muted dark:text-poly-muted text-sm">Strength</span>
           <span className="text-poly-light-text dark:text-white font-semibold">{properties?.strength?.toFixed(1) || '-'}</span>
         </div>
         <PropertyBar type="strength" value={properties?.strength || 0} />
@@ -97,7 +97,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       <div className="mt-3">
         <div className="flex justify-between items-center">
-          <span className="text-poly-light-muted dark:text-gray-500 text-sm">Flexibility</span>
+          <span className="text-poly-light-muted dark:text-poly-muted text-sm">Flexibility</span>
           <span className="text-poly-light-text dark:text-white font-semibold">{properties?.flexibility?.toFixed(1) || '-'}</span>
         </div>
         <PropertyBar type="flexibility" value={properties?.flexibility || 0} />
@@ -105,7 +105,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       <div className="mt-3">
         <div className="flex justify-between items-center">
-          <span className="text-poly-light-muted dark:text-gray-500 text-sm">Degradability</span>
+          <span className="text-poly-light-muted dark:text-poly-muted text-sm">Degradability</span>
           <span className="text-poly-light-text dark:text-white font-semibold">{properties?.degradability?.toFixed(1) || '-'}</span>
         </div>
         <PropertyBar type="degradability" value={properties?.degradability || 0} />
@@ -113,7 +113,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       <div className="mt-3">
         <div className="flex justify-between items-center">
-          <span className="text-poly-light-muted dark:text-gray-500 text-sm flex items-center gap-1.5">
+          <span className="text-poly-light-muted dark:text-poly-muted text-sm flex items-center gap-1.5">
             <Leaf className="w-3.5 h-3.5 text-green-500" /> Sustainability
           </span>
           <span className="text-poly-light-text dark:text-white font-semibold">{properties?.sustainability?.toFixed(1) || '-'}</span>

@@ -48,7 +48,7 @@ const getStatusIcon = (status: SimulationStatus) => {
     case 'completed':
       return <CheckCircle className="w-4 h-4 text-emerald-400" />;
     case 'failed':
-      return <AlertCircle className="w-4 h-4 text-red-400" />;
+      return <AlertCircle className="w-4 h-4 text-amber-400" />;
   }
 };
 
@@ -622,7 +622,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
           {/* Left Column */}
           <div className="w-80 flex flex-col gap-4">
             {/* Add to Queue Card */}
-            <div className="bg-neutral-900/90  rounded-xl border border-neutral-700 p-4">
+            <div className="bg-cyan-950/80 rounded-xl border border-cyan-800/50 p-4">
               <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                 <Plus className="w-4 h-4 text-white/70" />
                 Add to Queue
@@ -630,7 +630,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
               
               <div className="mb-3">
                 <p className="text-xs text-white/50 mb-1">Current Molecule</p>
-                <p className="font-mono text-xs text-white bg-black/50 p-2 rounded border border-neutral-700 truncate">
+                <p className="font-mono text-xs text-white bg-black/50 p-2 rounded border border-cyan-800/50 truncate">
                   {currentSmiles || 'No molecule on canvas'}
                 </p>
               </div>
@@ -641,8 +641,8 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
                 className={`
                   w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-all
                   ${currentSmiles 
-                    ? 'bg-white text-black hover:bg-white/90' 
-                    : 'bg-neutral-700 text-neutral-500 cursor-not-allowed'}
+                    ? 'bg-cyan-400 text-black hover:bg-cyan-300' 
+                    : 'bg-neutral-700 text-neutral-400 cursor-not-allowed'}
                 `}
               >
                 <Plus className="w-4 h-4" />
@@ -650,7 +650,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
               </button>
               
               {addError && (
-                <p className="mt-2 text-xs text-red-400 flex items-center gap-1">
+                <p className="mt-2 text-xs text-amber-400 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" />
                   {addError}
                 </p>
@@ -695,7 +695,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
               {totalCompleted > 0 && (
                 <button
                   onClick={onClearCompleted}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-red-950/50 text-red-400 border border-red-500/30 hover:bg-red-950/70 transition-all"
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-amber-950/50 text-amber-400 border border-amber-500/30 hover:bg-amber-950/70 transition-all"
                   title="Clear completed tasks"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -705,12 +705,12 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
           </div>
 
           {/* Right Column - Queue and Completed */}
-          <div className="flex-1 flex flex-col overflow-hidden bg-neutral-900/80 backdrop-blur-sm rounded-xl border border-neutral-700">
+          <div className="flex-1 flex flex-col overflow-hidden bg-cyan-950/70 backdrop-blur-sm rounded-xl border border-cyan-800/50">
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {/* Pending Queue */}
               {queue.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-white/70 mb-3 flex items-center gap-2 sticky top-0 bg-neutral-900/95 py-2 -mt-2 backdrop-blur-sm z-10">
+                  <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2 sticky top-0 bg-cyan-950/95 py-2 -mt-2 backdrop-blur-sm z-10">
                     <Clock className="w-4 h-4 text-yellow-400" />
                     Pending Queue ({queue.length})
                   </h3>
@@ -730,7 +730,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
               {/* Completed Tasks */}
               {completedTasks.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-white/70 mb-3 flex items-center gap-2 sticky top-0 bg-neutral-900/95 py-2 -mt-2 backdrop-blur-sm z-10">
+                  <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2 sticky top-0 bg-cyan-950/95 py-2 -mt-2 backdrop-blur-sm z-10">
                     <CheckCircle className="w-4 h-4 text-emerald-400" />
                     Completed ({completedTasks.length})
                   </h3>
@@ -750,7 +750,7 @@ const SimulationPage: React.FC<SimulationPageProps> = ({
               {/* Empty State */}
               {!hasActivity && completedTasks.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                  <ListOrdered className="w-16 h-16 text-neutral-700 mb-4" />
+                  <ListOrdered className="w-16 h-16 text-cyan-800 mb-4" />
                   <p className="text-lg font-medium text-white mb-2">
                     Queue is empty
                   </p>
@@ -789,12 +789,12 @@ const TaskCard: React.FC<TaskCardProps> = ({
     <div className={`
       p-3 rounded-lg border transition-all
       ${isRunning 
-        ? 'border-cyan-500/50 bg-cyan-950/30' 
+        ? 'border-cyan-500/50 bg-cyan-900/50' 
         : task.status === 'completed'
-          ? 'border-emerald-500/30 bg-neutral-800/50'
+          ? 'border-emerald-500/30 bg-cyan-900/40'
           : task.status === 'failed'
-            ? 'border-red-500/30 bg-red-950/20'
-            : 'border-neutral-600 bg-neutral-800/50'}
+            ? 'border-amber-500/30 bg-amber-950/30'
+            : 'border-cyan-700/50 bg-cyan-900/40'}
     `}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
@@ -812,7 +812,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
               text-xs px-1.5 py-0.5 rounded border
               ${task.status === 'completed' ? 'bg-emerald-950/50 text-emerald-400 border-emerald-500/30' :
                 task.status === 'running' ? 'bg-cyan-950/50 text-cyan-400 border-cyan-500/30' :
-                task.status === 'failed' ? 'bg-red-950/50 text-red-400 border-red-500/30' :
+                task.status === 'failed' ? 'bg-amber-950/50 text-amber-400 border-amber-500/30' :
                 'bg-yellow-950/50 text-yellow-400 border-yellow-500/30'}
             `}>
               {getStatusLabel(task.status)}
@@ -829,7 +829,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 <span className="text-white/60">Progress</span>
                 <span className="text-cyan-400 font-medium">{task.progress}%</span>
               </div>
-              <div className="h-1.5 bg-neutral-700 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-cyan-400 rounded-full transition-all duration-300"
                   style={{ width: `${task.progress}%` }}
@@ -841,26 +841,26 @@ const TaskCard: React.FC<TaskCardProps> = ({
           {/* Result summary for completed tasks */}
           {showResult && task.result && (
             <div className="mt-2 grid grid-cols-4 gap-1.5 text-xs">
-              <div className="bg-neutral-900/80 p-1.5 rounded border border-neutral-700 text-center">
-                <span className="text-white/40 text-[10px]">STR</span>
+              <div className="bg-cyan-950/80 p-1.5 rounded border border-cyan-800/50 text-center">
+                <span className="text-white/60 text-[10px]">STR</span>
                 <p className="font-medium text-white">
                   {(task.result.predictedProperties.strength * 100).toFixed(0)}%
                 </p>
               </div>
-              <div className="bg-neutral-900/80 p-1.5 rounded border border-neutral-700 text-center">
-                <span className="text-white/40 text-[10px]">FLX</span>
+              <div className="bg-cyan-950/80 p-1.5 rounded border border-cyan-800/50 text-center">
+                <span className="text-white/60 text-[10px]">FLX</span>
                 <p className="font-medium text-white">
                   {(task.result.predictedProperties.flexibility * 100).toFixed(0)}%
                 </p>
               </div>
-              <div className="bg-neutral-900/80 p-1.5 rounded border border-neutral-700 text-center">
-                <span className="text-white/40 text-[10px]">DEG</span>
+              <div className="bg-cyan-950/80 p-1.5 rounded border border-cyan-800/50 text-center">
+                <span className="text-white/60 text-[10px]">DEG</span>
                 <p className="font-medium text-white">
                   {(task.result.predictedProperties.degradability * 100).toFixed(0)}%
                 </p>
               </div>
-              <div className="bg-neutral-900/80 p-1.5 rounded border border-neutral-700 text-center">
-                <span className="text-white/40 text-[10px]">Time</span>
+              <div className="bg-cyan-950/80 p-1.5 rounded border border-cyan-800/50 text-center">
+                <span className="text-white/60 text-[10px]">Time</span>
                 <p className="font-medium text-white">
                   {formatDuration(task.result.simulationTime)}
                 </p>
@@ -870,7 +870,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
           {/* Error message */}
           {task.status === 'failed' && task.error && (
-            <p className="mt-2 text-xs text-red-400">
+            <p className="mt-2 text-xs text-amber-400">
               Error: {task.error}
             </p>
           )}
@@ -880,7 +880,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
         {task.status === 'pending' && (
           <button
             onClick={() => onRemove(task.id)}
-            className="p-1 hover:bg-red-500/20 rounded transition-colors text-red-400"
+            className="p-1 hover:bg-amber-500/20 rounded transition-colors text-amber-400"
             title="Remove from queue"
           >
             <X className="w-3 h-3" />
