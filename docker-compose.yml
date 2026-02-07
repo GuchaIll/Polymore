@@ -39,7 +39,7 @@ services:
 
   # Celery Worker
   worker:
-    build: ./backend
+    image: ghcr.io/guchaill/polymore-backend:latest
     restart: always
     command: celery -A worker.celery_app worker --loglevel=info
     depends_on:
