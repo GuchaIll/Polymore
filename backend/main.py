@@ -148,46 +148,32 @@ def predict_heuristics(request: SmiRequest):
         logger.error(f"Prediction failed for SMILES {request.smiles}: {e}")
         raise ServerException(detail=str(e))
 
-@app.post("/predict/tier-2", status_code=202, response_model=ResponseModel[TaskSubmissionResponse])
-def analyze_high_compute(request: AnalysisRequest, db: Session = Depends(get_db)):
+@app.post("/predict/tier-2", response_model=ResponseModel[AnalysisResponse])
+def analyze_high_compute(request: AnalysisRequest):
     """
-    Submit a high-compute analysis task to the Celery queue.
+    Perform high-compute Tier 2 analysis synchronously.
     
-    This endpoint accepts a molecule SMILES string and offloads the intensive
-    quantum mechanical analysis (GFN2-xTB) to a background worker.
+    This endpoint directly runs the GFN2-xTB physics-based profiling
+    and returns the results immediately (blocking).
     
     Returns:
-        ResponseModel containing the task_id and submission status.
+        ResponseModel containing the analysis results (TierTwoAnalysis).
     """
+    logger.info(f"Received Tier 2 analysis request for SMILES: {request.smiles}")
     try:
-        # Generate task ID upfront to avoid race condition
-        task_id = str(uuid.uuid4())
+        from features.advanced_analysis import analyze_molecule_high_compute
         
-        # Create task record in database BEFORE enqueueing
-        db_task = Task(
-            task_id=task_id,
-            type="tier-2",
-            status="PENDING",
-            input_data={"smiles": request.smiles}
-        )
-        db.add(db_task)
-        db.commit()
-        
-        # Now enqueue the task with the pre-generated task_id
-        task = analyze_molecule_task.apply_async(args=[request.smiles], task_id=task_id)
+        # Run analysis directly (synchronous)
+        # Note: This is compute-intensive and blocking!
+        result = analyze_molecule_high_compute(request.smiles)
         
         return ResponseModel(
-            status=202,
-            message="Analysis submitted to queue",
-            data=TaskSubmissionResponse(
-                task_id=task.id,
-                status="submitted",
-                message="Analysis submitted successfully"
-            )
+            status=200,
+            message="Tier 2 analysis complete",
+            data=AnalysisResponse(**result)
         )
     except Exception as e:
-        logger.error(f"Failed to submit analysis task: {e}")
-        db.rollback()
+        logger.error(f"Tier 2 analysis failed: {e}", exc_info=True)
         raise ServerException(detail=str(e))
 
 @app.get("/tasks/{task_id}", response_model=ResponseModel[TaskStatusResponse])
