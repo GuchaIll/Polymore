@@ -244,8 +244,8 @@ def download_datasets():
 
 def get_sustainability_features(mol):
     """Generate raw features for ML input (X) - Sustainability-specific features"""
-    from rdkit.Chem import Descriptors, GraphDescriptors, rdMolDescriptors, Crippen
     from rdkit import Chem
+    from rdkit.Chem import Descriptors, GraphDescriptors, rdMolDescriptors, Crippen
     
     if not mol: 
         return None
@@ -311,7 +311,8 @@ def get_sustainability_features(mol):
 
 def generate_synthetic_targets(mol):
     """Generate Teacher Labels (Y) for Weak Supervision"""
-    from rdkit.Chem import Descriptors, rdMolDescriptors, Chem, GraphDescriptors
+    from rdkit import Chem
+    from rdkit.Chem import Descriptors, rdMolDescriptors, GraphDescriptors
     
     if not mol: 
         return None
@@ -1848,36 +1849,36 @@ def train_sustainability_models_parallel():
     print("🧪 Generating features (shared step)...")
     feature_start = time.time()
     
-    from get_sustainability_features import get_sustainability_features
+    # from get_sustainability_features import get_sustainability_features
     
     train_df = pd.read_csv(DATA_PATH / 'neurips-open-polymer-prediction-2025' / 'train.csv')
     smiles_list = train_df['SMILES'].tolist()
     
     # Generate targets and features
-    try:
-        X_data, Y_data = get_sustainability_features(train_df)
-    except Exception as e:
-        print(f"⚠️ Using fallback feature generation: {e}")
-        # Fallback implementation (simplified)
-        X_data = []
-        Y_data = {
-            'Target_Recyclability': [],
-            'Target_BioSource': [],
-            'Target_EnvSafety': [],
-            'Target_SynthEfficiency': []
-        }
-        
-        for smiles in smiles_list:
-            # Simple features
-            features = {
-                'mol_weight': len(smiles),  # Placeholder
-                'num_atoms': len(smiles.split()),
-            }
-            X_data.append(features)
-            
-            # Simple targets
-            for target in Y_data.keys():
-                Y_data[target].append(0.5)  # Placeholder
+    # Generate targets and features
+    from rdkit import Chem
+    # from tqdm import tqdm
+    
+    X_data = []
+    Y_rows = []
+    
+    print(f"   🧪 processing {len(smiles_list)} molecules...")
+    for smiles in smiles_list:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol:
+            feats = get_sustainability_features(mol)
+            targets = generate_synthetic_targets(mol)
+            if feats and targets:
+                X_data.append(feats)
+                Y_rows.append(targets)
+    
+    if not X_data:
+         print("⚠️  No valid data generated!")
+         return
+         
+    # Convert list of dicts to dict of lists for Y_data
+    Y_df = pd.DataFrame(Y_rows)
+    Y_data = {col: Y_df[col].tolist() for col in Y_df.columns}
     
     X_df = pd.DataFrame(X_data)
     TARGET_COLS = list(Y_data.keys())
@@ -1890,10 +1891,26 @@ def train_sustainability_models_parallel():
     parallel_start = time.time()
     
     # Launch parallel jobs
-    results = list(modal.gather(*[
+    # from get_sustainability_features import generate_synthetic_targets # Just in case, but we used local one
+    
+    futures = [
         train_sustainability_single_target.remote(target, X_data, Y_data, smiles_list)
         for target in TARGET_COLS
-    ]))
+    ]
+    
+    results = []
+    for i, f in enumerate(futures):
+        print(f"   DEBUG: Future {i} type: {type(f)}")
+        try:
+            # Try calling get() with no args
+            res = f.get()
+            results.append(res)
+        except TypeError as e:
+            print(f"   ⚠️ TypeError on get(): {e}")
+            # Fallback for dict-like objects or other types
+            results.append(f)
+
+    # results = [f.get() for f in futures]
     
     parallel_time = time.time() - parallel_start
     
@@ -2350,6 +2367,7 @@ def main(
     
     print("=" * 60)
     
+    pipeline_start = time.time()
     stage_times = {}
     
     # Step 1: Download datasets
@@ -2534,10 +2552,10 @@ def main(
         
         if parallel_sustainability:
             print("   ⚡ Using PARALLEL per-target training (4 GPUs simultaneously)")
-            train_sustainability_models_parallel.remote().get()  # Block until complete
+            train_sustainability_models_parallel.remote()  # Block until complete
         else:
             print("   📝 Using sequential training (tip: add --parallel-sustainability for 3-4x speedup)")
-            train_sustainability_models.remote().get()  # Block until complete (prevents race condition)
+            train_sustainability_models.remote()  # Block until complete (prevents race condition)
         
         stage_times['sustainability_train'] = time.time() - stage_start
         print(f"⏱️  Step 6 time: {stage_times['sustainability_train']:.2f}s")
