@@ -459,8 +459,27 @@ const ApplicationCard: React.FC<{
   );
 };
 
-// Plastic comparison card with hover
-const PlasticCard: React.FC<{ plastic: { name: string; desc: string }; index: number }> = ({ plastic, index }) => {
+// Material type for comparison cards
+interface MaterialData {
+  name: string;
+  desc: string;
+  strength: number;
+  elasticity: number;
+  thermal: number;
+  flexibility: number;
+  ecoScore: number;
+  biodegradable: number;
+  degradability: number;
+  sustainability: number;
+}
+
+// Plastic comparison card with hover and selection
+const PlasticCard: React.FC<{ 
+  plastic: MaterialData; 
+  index: number; 
+  isSelected: boolean;
+  onClick: () => void;
+}> = ({ plastic, index, isSelected, onClick }) => {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -468,28 +487,41 @@ const PlasticCard: React.FC<{ plastic: { name: string; desc: string }; index: nu
       className={`
         bg-gradient-to-br from-[#a8e6cf]/30 to-[#56ab2f]/20 dark:from-emerald-500/20 dark:to-emerald-700/10 
         rounded-xl px-4 py-3 flex flex-col items-center min-w-[120px] max-w-[220px] 
-        border border-[#95e1d3]/40 dark:border-emerald-500/30
-        transition-all duration-300 cursor-pointer
-        ${isHovered ? 'scale-105 shadow-lg shadow-emerald-500/20 border-emerald-500/60' : 'scale-100'}
+        border-2 transition-all duration-300 cursor-pointer
+        ${isSelected 
+          ? 'border-emerald-500 dark:border-emerald-400 scale-105 shadow-lg shadow-emerald-500/30 ring-2 ring-emerald-500/20' 
+          : isHovered 
+            ? 'border-emerald-500/60 scale-105 shadow-lg shadow-emerald-500/20' 
+            : 'border-[#95e1d3]/40 dark:border-emerald-500/30 scale-100'
+        }
       `}
       style={{ 
         animationDelay: `${index * 150}ms`,
         opacity: 0,
         animation: 'fadeIn 0.5s ease-out forwards'
       }}
+      onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      {/* Selection indicator */}
+      {isSelected && (
+        <div className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
+          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+      )}
       <span className={`
-        font-bold text-[#2d6a4f] dark:text-emerald-400 text-sm
-        transition-all duration-200
-        ${isHovered ? 'scale-110' : 'scale-100'}
+        font-bold text-sm transition-all duration-200
+        ${isSelected ? 'text-emerald-600 dark:text-emerald-300 scale-110' : 'text-[#2d6a4f] dark:text-emerald-400'}
+        ${isHovered && !isSelected ? 'scale-110' : ''}
       `}>
         {plastic.name}
       </span>
       <span className={`
-        text-[10px] text-gray-600 dark:text-gray-400 text-center leading-tight mt-1
-        transition-all duration-300
+        text-[10px] text-center leading-tight mt-1 transition-all duration-300
+        ${isSelected ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-600 dark:text-gray-400'}
         ${isHovered ? 'text-gray-700 dark:text-gray-300' : ''}
       `}>
         {plastic.desc}
@@ -504,10 +536,96 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollIndicator, setShowScrollIndicator] = useState(true);
   const { ref: sustainabilityRef, isVisible: sustainabilityVisible } = useScrollVisibility(0.15);
+  const [selectedMaterialIndex, setSelectedMaterialIndex] = useState(0); // 0 = Current Polymer
+
+  // Build materials array with Current Polymer as first entry
+  const materialsComparison: MaterialData[] = React.useMemo(() => [
+    {
+      name: 'Your Polymer',
+      desc: 'Your designed polymer with predicted properties.',
+      strength: properties.strength || 0,
+      elasticity: properties.elasticity || 0,
+      thermal: properties.thermal || 0,
+      flexibility: properties.flexibility || 0,
+      ecoScore: properties.ecoScore || 0,
+      biodegradable: properties.biodegradable || 0,
+      degradability: properties.degradability || 0,
+      sustainability: properties.sustainability || 0
+    },
+    {
+      name: 'PLA',
+      desc: 'Biodegradable, compostable, used in packaging and 3D printing.',
+      strength: 65,
+      elasticity: 40,
+      thermal: 35,
+      flexibility: 45,
+      ecoScore: 90,
+      biodegradable: 95,
+      degradability: 90,
+      sustainability: 85
+    },
+    {
+      name: 'PET',
+      desc: 'Common in bottles, strong and recyclable but not biodegradable.',
+      strength: 85,
+      elasticity: 70,
+      thermal: 80,
+      flexibility: 65,
+      ecoScore: 60,
+      biodegradable: 5,
+      degradability: 10,
+      sustainability: 55
+    },
+    {
+      name: 'HDPE',
+      desc: 'Very durable and chemically resistant, widely used in containers.',
+      strength: 80,
+      elasticity: 85,
+      thermal: 75,
+      flexibility: 90,
+      ecoScore: 40,
+      biodegradable: 0,
+      degradability: 5,
+      sustainability: 35
+    }
+  ], [properties]);
+
+  // Get currently selected material's properties
+  const selectedMaterial = materialsComparison[selectedMaterialIndex];
+  const displayProperties = {
+    strength: selectedMaterial.strength,
+    elasticity: selectedMaterial.elasticity,
+    thermal: selectedMaterial.thermal,
+    flexibility: selectedMaterial.flexibility,
+    ecoScore: selectedMaterial.ecoScore,
+    biodegradable: selectedMaterial.biodegradable,
+    degradability: selectedMaterial.degradability,
+    sustainability: selectedMaterial.sustainability
+  };
+
+  // Calculate application suitability based on selected material
+  const calculatedApplications = React.useMemo(() => {
+    const mat = materialsComparison[selectedMaterialIndex];
+    return applications.map(app => {
+      // Calculate suitability based on material properties
+      // This is a simple weighted average - adjust weights per application type
+      const avgScore = (
+        mat.strength * 0.2 +
+        mat.flexibility * 0.2 +
+        mat.sustainability * 0.3 +
+        mat.degradability * 0.15 +
+        mat.ecoScore * 0.15
+      );
+      return {
+        ...app,
+        suitability: Math.round(avgScore)
+      };
+    });
+  }, [selectedMaterialIndex, materialsComparison, applications]);
   
   useEffect(() => {
     // Staggered animation for suitability bars
-    applications.forEach((app, i) => {
+    calculatedApplications.forEach((app, i) => {
       setTimeout(() => {
         const ref = barRefs.current[i];
         if (ref) {
@@ -515,7 +633,7 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
         }
       }, 300 + i * 150);
     });
-  }, [applications]);
+  }, [calculatedApplications]);
 
   // Handle scroll to hide indicator
   useEffect(() => {
@@ -536,11 +654,7 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
     sustainabilityRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const plasticComparison = [
-    { name: 'PLA', desc: 'Biodegradable, compostable, used in packaging and 3D printing.' },
-    { name: 'PET', desc: 'Common in bottles, strong but not biodegradable.' },
-    { name: 'HDPE', desc: 'Durable, used in containers, not biodegradable.' },
-  ];
+// Materials comparison is now generated in component with useMemo
 
   return (
     <div ref={containerRef} className="flex flex-col min-h-full w-full bg-gradient-to-br from-[#f0fff4] to-[#e6f7ed] dark:from-poly-bg dark:to-poly-sidebar p-4 md:p-6 pb-8 overflow-y-auto overflow-x-hidden relative scroll-smooth">
@@ -588,15 +702,27 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
         </div>
       )}
 
-      {/* Top plastic comparison */}
+      {/* Material selection cards */}
       <div className="flex flex-col items-center mb-5 flex-shrink-0">
+        <p className="text-center text-gray-600 dark:text-gray-400 text-xs mb-3 opacity-0 animate-fadeIn" style={{ animationDelay: '100ms' }}>
+          Select a material to compare properties
+        </p>
         <div className="flex gap-4 mb-3 flex-wrap justify-center">
-          {plasticComparison.map((plastic, index) => (
-            <PlasticCard key={plastic.name} plastic={plastic} index={index} />
+          {materialsComparison.map((material, index) => (
+            <PlasticCard 
+              key={material.name} 
+              plastic={material} 
+              index={index}
+              isSelected={selectedMaterialIndex === index}
+              onClick={() => setSelectedMaterialIndex(index)}
+            />
           ))}
         </div>
         <p className="text-center text-gray-600 dark:text-gray-400 text-xs max-w-xl opacity-0 animate-fadeIn" style={{ animationDelay: '500ms' }}>
-          Compare your polymer to common plastics for sustainability, degradability, and application fit.
+          {selectedMaterialIndex === 0 
+            ? 'Viewing your designed polymer properties and potential applications.'
+            : `Comparing with ${selectedMaterial.name} - click "Your Polymer" to return to your design.`
+          }
         </p>
       </div>
 
@@ -617,7 +743,7 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
             Property Profile
           </h3>
           <div className="flex items-center justify-center overflow-visible">
-            <RadarChart properties={properties} isDark={isDark} />
+            <RadarChart properties={displayProperties} isDark={isDark} />
           </div>
         </div>
 

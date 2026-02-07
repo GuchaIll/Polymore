@@ -431,10 +431,10 @@ export function usePolyForgeState() {
       const result = await tierOneAnalysis.analyze(smiles);
       
       if (result) {
-        // Normalize values: if > 1 use as-is, otherwise multiply by 100
+        // Backend returns 0-10 scale, multiply by 10 to get 0-100 for display
         const normalize = (val: number | undefined) => {
           if (val === undefined || val === null) return 0;
-          return val > 1 ? val : val * 100;
+          return val * 10;
         };
         
         const properties: PredictedProperties = {

@@ -248,14 +248,18 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
       showToast('Predicting properties...');
       const predictionResult = await predictPropertiesFromBackend(smilesForPrediction);
       
+      console.log('Prediction result:', JSON.stringify(predictionResult, null, 2));
+      
       if (predictionResult.success && predictionResult.properties) {
         // Map backend properties to our PredictedProperties format
-        // Backend returns values - normalize to 0-100 scale if needed
+        // Backend returns values in 0-10 scale, we need 0-100 for display
         const p = predictionResult.properties;
+        console.log('Properties from backend:', p);
+        
         const normalize = (val: number | undefined, fallback: number) => {
           if (val === undefined || val === null) return fallback;
-          // If value is already in 0-100 scale, use as is; otherwise multiply by 100
-          return val > 1 ? val : val * 100;
+          // Backend returns 0-10 scale, multiply by 10 to get 0-100
+          return val * 10;
         };
         
         const props: PredictedProperties = {
@@ -264,10 +268,12 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
           degradability: normalize(p.degradability, 40),
           sustainability: normalize(p.sustainability, 55),
         };
+        console.log('Normalized props:', props);
         setPredictedProperties(props);
         setCurrentSmiles(smilesForPrediction);
         showToast('Properties predicted successfully!');
       } else {
+        console.log('Prediction failed:', predictionResult.error);
         // Show error message - no fallback since both use same backend
         showToast(predictionResult.error || 'Prediction failed');
       }
