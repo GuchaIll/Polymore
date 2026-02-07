@@ -1,5 +1,5 @@
 """
-Modal-based Polymer Prediction Inference Pipeline
+Modal-based Polymer Prediction Inference Pipeline with Sustainability Metrics
 
 This script runs the polymer property prediction inference on Modal's serverless infrastructure.
 It generates predictions using three different model types:
@@ -7,9 +7,18 @@ It generates predictions using three different model types:
 2. BERT models
 3. TabTransformer models
 
+Additionally, it supports sustainability metrics prediction:
+4. Sustainability models (XGBoost + DeBERTa transfer learning)
+   - Recyclability
+   - BioSource
+   - Environmental Safety
+   - Synthesis Efficiency
+
 Usage:
-    modal run polymer_modal.py
-    modal run polymer_modal.py --skip-download  # Skip dataset download if already present
+    modal run polymer_modal_sustainability.py
+    modal run polymer_modal_sustainability.py --skip-download
+    modal run polymer_modal_sustainability.py --train-sustainability
+    modal run polymer_modal_sustainability.py --predict-sustainability
 """
 
 import modal
@@ -22,6 +31,7 @@ from pathlib import Path
 # Create Modal volumes for persistent storage
 data_volume = modal.Volume.from_name("polymer-data", create_if_missing=True)
 results_volume = modal.Volume.from_name("polymer-results", create_if_missing=True)
+models_volume = modal.Volume.from_name("polymer-models", create_if_missing=True)  # NEW: For sustainability models
 
 # Define container images for different model types
 base_image = (
@@ -63,6 +73,7 @@ dl_image = (
         "tqdm~=4.66.0",
         "networkx~=3.1.0",
         "openpyxl~=3.1.0",
+        "xgboost~=2.0.0",  # Added for sustainability models
     )
     .pip_install(
         "rdkit~=2023.9.1",
@@ -75,6 +86,7 @@ app = modal.App("polymer-prediction")
 # Path constants
 DATA_PATH = Path("/data")
 RESULTS_PATH = Path("/results")
+MODELS_PATH = Path("/models")  # NEW: For sustainability models
 
 # ============================================================================
 # Data Download Function
@@ -207,6 +219,124 @@ def download_datasets():
     if success_count < len(datasets):
         print("⚠️  Some datasets failed to download. Check the logs above for details.")
 
+
+
+# ============================================================================
+# Sustainability Feature Engineering & Target Generation
+# ============================================================================
+
+def get_sustainability_features(mol):
+    """Generate raw features for ML input (X) - Sustainability-specific features"""
+    from rdkit.Chem import Descriptors, GraphDescriptors, rdMolDescriptors, Crippen
+    from rdkit import Chem
+    
+    if not mol: 
+        return None
+    
+    # 1. Complexity (Energy Proxy)
+    feat_synth_complexity = GraphDescriptors.BertzCT(mol)
+    
+    # 2. Physical Properties
+    feat_logp = Crippen.MolLogP(mol)
+    feat_tpsa = Descriptors.TPSA(mol)
+    
+    # 3. Structure
+    n_heavy = mol.GetNumHeavyAtoms()
+    n_rot = Descriptors.NumRotatableBonds(mol)
+    feat_rot_density = n_rot / n_heavy if n_heavy > 0 else 0
+    
+    n_aromatic = len([a for a in mol.GetAtoms() if a.GetIsAromatic()])
+    feat_aromatic_prop = n_aromatic / n_heavy if n_heavy > 0 else 0
+    
+    # 4. Bio-Logic
+    feat_fsp3 = rdMolDescriptors.CalcFractionCSP3(mol)
+    feat_chiral = len(Chem.FindMolChiralCenters(mol, includeUnassigned=True))
+    
+    # 5. Functional Groups (Counts)
+    patterns = {
+        "feat_ester": "[CX3](=[OX1])[OX2]",
+        "feat_amide": "[CX3](=[OX1])[NX3]",
+        "feat_carbonate": "[OX2][CX3](=[OX1])[OX2]",
+        "feat_pfas": "[#6](F)(F)[#6](F)(F)",
+        "feat_isocyanate": "N=C=O"
+    }
+    
+    counts = {}
+    for k, pat in patterns.items():
+        try:
+            counts[k] = len(mol.GetSubstructMatches(Chem.MolFromSmarts(pat)))
+        except:
+            counts[k] = 0
+    
+    # 6. Topological Torsion (for steric access / 3D hindrance proxy)
+    try:
+        torsion_fp = rdMolDescriptors.GetHashedTopologicalTorsionFingerprint(mol, nBits=2048)
+        # Aggregate to simple features: count of set bits, density
+        feat_torsion_count = torsion_fp.GetNumOnBits()
+        feat_torsion_density = feat_torsion_count / 2048
+    except:
+        feat_torsion_count = 0
+        feat_torsion_density = 0
+        
+    return {
+        "feat_synth_complexity": feat_synth_complexity,
+        "feat_rot_density": feat_rot_density,
+        "feat_aromatic_prop": feat_aromatic_prop,
+        "feat_fsp3": feat_fsp3,
+        "feat_chiral": feat_chiral,
+        "feat_logp": feat_logp,
+        "feat_tpsa": feat_tpsa,
+        "feat_torsion_count": feat_torsion_count,
+        "feat_torsion_density": feat_torsion_density,
+        **counts
+    }
+
+
+def generate_synthetic_targets(mol):
+    """Generate Teacher Labels (Y) for Weak Supervision"""
+    from rdkit.Chem import Descriptors, rdMolDescriptors, Chem, GraphDescriptors
+    
+    if not mol: 
+        return None
+    
+    mw = Descriptors.MolWt(mol)
+    
+    # A. Recyclability (Density of breakable bonds)
+    recyclable_counts = 0
+    for pattern in ["[CX3](=[OX1])[OX2]", "[CX3](=[OX1])[NX3]"]:
+        try:
+            recyclable_counts += len(mol.GetSubstructMatches(Chem.MolFromSmarts(pattern)))
+        except:
+            pass
+    target_recyclability = min(100.0, (recyclable_counts * 200) / (mw + 1) * 50.0)
+
+    # B. Bio-Source (Sp3 + Chirality)
+    f_sp3 = rdMolDescriptors.CalcFractionCSP3(mol)
+    target_bio = f_sp3 * 100.0
+    
+    # C. Safety (Penalize toxic alerts)
+    alerts = 0
+    for pattern in ["[#6](F)(F)[#6](F)(F)", "N=C=O", "[Hg,Pb,Cd,As]"]:
+        try:
+            if mol.HasSubstructMatch(Chem.MolFromSmarts(pattern)):
+                alerts += 100
+        except:
+            pass
+    target_safety = max(0.0, 100.0 - alerts)
+    
+    # D. Efficiency (Inverse Complexity)
+    try:
+        bertz = GraphDescriptors.BertzCT(mol)
+        target_efficiency = max(0.0, 100.0 - ((bertz - 200) / 10.0))
+    except:
+        target_efficiency = 50.0
+    
+    return {
+        "Target_Recyclability": target_recyclability,
+        "Target_BioSource": target_bio,
+        "Target_EnvSafety": target_safety,
+        "Target_SynthEfficiency": target_efficiency
+    }
 
 
 # ============================================================================
@@ -1098,12 +1228,333 @@ def create_ensemble():
     return str(output_path)
 
 # ============================================================================
+# Sustainability Model Training
+# ============================================================================
+
+@app.function(
+    image=dl_image,
+    gpu="a100",  # Needs GPU for De BERT a fine-tuning
+    volumes={DATA_PATH: data_volume, MODELS_PATH: models_volume},
+    timeout=7200,  # 2 hours
+)
+def train_sustainability_models():
+    """Train sustainability prediction models using transfer learning"""
+    import pandas as pd
+    import numpy as np
+    import torch
+    import joblib
+    import xgboost as xgb
+    from torch import nn
+    from transformers import AutoConfig, AutoModel, AutoTokenizer
+    from rdkit import Chem
+    from torch.utils.data import DataLoader, TensorDataset
+    from tqdm import tqdm
+    
+    print("🏗️ Starting Sustainability Model Training Pipeline...")
+    
+    # 1. Load Raw Data
+    train_df = pd.read_csv(DATA_PATH / 'neurips-open-polymer-prediction-2025' / 'train.csv')
+    
+    # 2. Generate Synthetic Targets (Y) and Features (X_tabular)
+    print("🧪 Generating synthetic targets and features...")
+    
+    X_data = []
+    Y_data = []
+    valid_indices = []
+    smiles_list = []
+    
+    for idx, row in tqdm(train_df.iterrows(), total=len(train_df), desc="Processing SMILES"):
+        smiles = row['SMILES']
+        mol = Chem.MolFromSmiles(smiles)
+        if mol:
+            feats = get_sustainability_features(mol)
+            targets = generate_synthetic_targets(mol)
+            if feats and targets:
+                X_data.append(feats)
+                Y_data.append(targets)
+                valid_indices.append(idx)
+                smiles_list.append(smiles)
+
+    X_df = pd.DataFrame(X_data)
+    Y_df = pd.DataFrame(Y_data)
+    
+    TARGET_COLS = Y_df.columns.tolist()
+    print(f"   Generated data for {len(X_df)} polymers. Targets: {TARGET_COLS}")
+    
+    # 3. Train XGBoost Models (Tabular Branch)
+    print("🌲 Training XGBoost Ensemble...")
+    xgb_models = {}
+    for target in TARGET_COLS:
+        print(f"   Training XGBoost for {target}...")
+        model = xgb.XGBRegressor(n_estimators=500, max_depth=6, learning_rate=0.05)
+        model.fit(X_df, Y_df[target])
+        xgb_models[target] = model
+        
+        # Save Model
+        MODELS_PATH.mkdir(exist_ok=True, parents=True)
+        model_path = MODELS_PATH / f"xgb_{target}.json"
+        model.save_model(str(model_path))
+        print(f"      Saved to {model_path}")
+    
+    # 4. Train DeBERTa (Transfer Learning Branch)
+    print("🧠 Fine-tuning DeBERTa (Transfer Learning)...")
+    
+    tokenizer_path = str(DATA_PATH / 'smiles-deberta77m-tokenizer')
+    weights_path = DATA_PATH / 'private-smile-bert-models/warm_smiles_model_Tg_target.pth'
+    
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    
+    # Custom Model Class (Multi-Head)
+    class SustainabilityTransferModel(nn.Module):
+        def __init__(self, config_path, num_targets):
+            super().__init__()
+            config = AutoConfig.from_pretrained(config_path)
+            self.backbone = AutoModel.from_config(config)
+            
+            # Context Pooler (Same as original)
+            pooler_size = getattr(config, 'pooler_hidden_size', config.hidden_size)
+            self.pooler_dense = nn.Linear(pooler_size, pooler_size)
+            self.pooler_activation = nn.Tanh()
+            
+            # NEW Head: Predicts all 4 sustainability targets at once
+            self.output = nn.Linear(pooler_size, num_targets)
+
+        def forward(self, input_ids, attention_mask):
+            outputs = self.backbone(input_ids, attention_mask=attention_mask)
+            # Pool
+            first_token_tensor = outputs.last_hidden_state[:, 0]
+            pooled_output = self.pooler_dense(first_token_tensor)
+            pooled_output = self.pooler_activation(pooled_output)
+            # Predict
+            return self.output(pooled_output)
+
+    # Prepare Data for PyTorch
+    tokens = tokenizer(smiles_list, padding='max_length', truncation=True, max_length=128, return_tensors='pt')
+    dataset = TensorDataset(
+        tokens['input_ids'], 
+        tokens['attention_mask'], 
+        torch.tensor(Y_df.values, dtype=torch.float32)
+    )
+    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+    
+    # Initialize Model & Load Weights
+    model = SustainabilityTransferModel(tokenizer_path, len(TARGET_COLS))
+    
+    if weights_path.exists():
+        print(f"   Loading pre-trained weights from {weights_path}")
+        checkpoint = torch.load(weights_path, map_location='cpu')
+        
+        # Filter out the old 'output' layer, load only backbone and pooler
+        backbone_state = {k: v for k, v in checkpoint.items() if 'output' not in k}
+        
+        # Load with strict=False to allow missing keys (new output layer)
+        missing_keys, unexpected_keys = model.load_state_dict(backbone_state, strict=False)
+        print(f"      Loaded backbone. Missing keys (expected): {len(missing_keys)}")
+        print(f"      Unexpected keys: {len(unexpected_keys)}")
+        
+        # Freeze backbone weights (transfer learning)
+        print("   Freezing backbone weights...")
+        for name, param in model.named_parameters():
+            if 'backbone' in name or 'pooler' in name:
+                param.requires_grad = False
+        
+        # Count trainable parameters
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        total_params = sum(p.numel() for p in model.parameters())
+        print(f"   Trainable parameters: {trainable_params:,} / {total_params:,}")
+    else:
+        print("⚠️ Pre-trained weights not found! Training from scratch.")
+    
+    model = model.cuda()
+    
+    # Training Loop
+    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=5e-5)
+    criterion = nn.MSELoss()
+    
+    model.train()
+    for epoch in range(3):  # Fast fine-tune
+        total_loss = 0
+        for b_ids, b_mask, b_y in tqdm(dataloader, desc=f"Epoch {epoch+1}"):
+            b_ids, b_mask, b_y = b_ids.cuda(), b_mask.cuda(), b_y.cuda()
+            
+            optimizer.zero_grad()
+            preds = model(b_ids, b_mask)
+            loss = criterion(preds, b_y)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+        print(f"   Epoch {epoch+1} Loss: {total_loss / len(dataloader):.4f}")
+        
+    # Save DeBERTa
+    model_save_path = MODELS_PATH / "sustainability_deberta.pth"
+    torch.save(model.state_dict(), model_save_path)
+    print(f"   Saved DeBERTa model to {model_save_path}")
+    
+    models_volume.commit()
+    print("✅ Training Complete. Models saved to /models")
+
+
+# ============================================================================
+# Sustainability Inference
+# ============================================================================
+
+@app.function(
+    image=dl_image,
+    gpu="a100",
+    volumes={DATA_PATH: data_volume, MODELS_PATH: models_volume, RESULTS_PATH: results_volume},
+)
+def run_sustainability_inference(smiles_list: list = None):
+    """
+    Run inference for sustainability metrics.
+    If smiles_list is None, runs on the competition test set.
+    """
+    import pandas as pd
+    import xgboost as xgb
+    import torch
+    import numpy as np
+    from transformers import AutoConfig, AutoModel, AutoTokenizer
+    from rdkit import Chem
+    from torch import nn
+    
+    print("🌿 Running Sustainability Inference...")
+    
+    # 1. Prepare Input Data
+    if smiles_list is None:
+        test_df = pd.read_csv(DATA_PATH / 'neurips-open-polymer-prediction-2025' / 'test.csv')
+        smiles_list = test_df['SMILES'].tolist()
+        ids = test_df['id'].tolist()
+    else:
+        ids = [f"custom_{i}" for i in range(len(smiles_list))]
+
+    # 2. XGBoost Inference
+    print("   🌲 Running XGBoost...")
+    X_data = []
+    valid_mask = []
+    
+    for s in smiles_list:
+        mol = Chem.MolFromSmiles(s)
+        if mol:
+            feats = get_sustainability_features(mol)
+            if feats:
+                X_data.append(feats)
+                valid_mask.append(True)
+            else:
+                X_data.append({})
+                valid_mask.append(False)
+        else:
+            X_data.append({})
+            valid_mask.append(False)
+            
+    X_df = pd.DataFrame(X_data)
+    
+    xgb_preds = {}
+    targets = ["Target_Recyclability", "Target_BioSource", "Target_EnvSafety", "Target_SynthEfficiency"]
+    
+    for t in targets:
+        model_path = MODELS_PATH / f"xgb_{t}.json"
+        try:
+            model = xgb.XGBRegressor()
+            model.load_model(str(model_path))
+            
+            # Predict
+            p = np.zeros(len(smiles_list))
+            if any(valid_mask) and len(X_df) > 0:
+                # Get valid rows
+                valid_X = X_df[valid_mask]
+                if len(valid_X) > 0:
+                    valid_preds = model.predict(valid_X)
+                    # Assign back to full array
+                    valid_idx = 0
+                    for i, is_valid in enumerate(valid_mask):
+                        if is_valid:
+                            p[i] = valid_preds[valid_idx]
+                            valid_idx += 1
+            
+            xgb_preds[t] = p
+        except Exception as e:
+            print(f"   ⚠️ Failed to load/run XGBoost for {t}: {e}")
+            xgb_preds[t] = np.zeros(len(smiles_list))
+
+    # 3. DeBERTa Inference
+    print("   🧠 Running DeBERTa...")
+    
+    # Re-define class (Must match training)
+    class SustainabilityTransferModel(nn.Module):
+        def __init__(self, config_path, num_targets):
+            super().__init__()
+            config = AutoConfig.from_pretrained(config_path)
+            self.backbone = AutoModel.from_config(config)
+            pooler_size = getattr(config, 'pooler_hidden_size', config.hidden_size)
+            self.pooler_dense = nn.Linear(pooler_size, pooler_size)
+            self.pooler_activation = nn.Tanh()
+            self.output = nn.Linear(pooler_size, num_targets)
+
+        def forward(self, input_ids, attention_mask):
+            outputs = self.backbone(input_ids, attention_mask=attention_mask)
+            first_token_tensor = outputs.last_hidden_state[:, 0]
+            pooled_output = self.pooler_dense(first_token_tensor)
+            pooled_output = self.pooler_activation(pooled_output)
+            return self.output(pooled_output)
+
+    tokenizer_path = str(DATA_PATH / 'smiles-deberta77m-tokenizer')
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    
+    model_path = MODELS_PATH / "sustainability_deberta.pth"
+    
+    try:
+        model = SustainabilityTransferModel(tokenizer_path, len(targets)).cuda()
+        model.load_state_dict(torch.load(model_path))
+        model.eval()
+        
+        tokens = tokenizer(smiles_list, padding='max_length', truncation=True, max_length=128, return_tensors='pt')
+        bert_preds = []
+        
+        # Batch inference
+        batch_size = 32
+        with torch.no_grad():
+            for i in range(0, len(smiles_list), batch_size):
+                b_ids = tokens['input_ids'][i:i+batch_size].cuda()
+                b_mask = tokens['attention_mask'][i:i+batch_size].cuda()
+                p = model(b_ids, b_mask).cpu().numpy()
+                bert_preds.append(p)
+                
+        bert_preds = np.concatenate(bert_preds, axis=0)  # Shape (N, 4)
+    except Exception as e:
+        print(f"   ⚠️ Failed to run DeBERTa: {e}")
+        bert_preds = np.zeros((len(smiles_list), 4))
+
+    # 4. Ensemble & Save
+    final_df = pd.DataFrame({'id': ids, 'SMILES': smiles_list})
+    
+    for i, t in enumerate(targets):
+        # Ensemble: 50% XGBoost, 50% DeBERTa
+        xgb_p = xgb_preds.get(t, np.zeros(len(smiles_list)))
+        bert_p = bert_preds[:, i]
+        
+        final_df[t] = (xgb_p * 0.5) + (bert_p * 0.5)
+
+    output_path = RESULTS_PATH / 'sustainability_predictions.csv'
+    final_df.to_csv(output_path, index=False)
+    results_volume.commit()
+    print(f"✅ Saved to {output_path}")
+    return str(output_path)
+
+# ============================================================================
 # Local Entrypoint
 # ============================================================================
 
 @app.local_entrypoint()
-def main(skip_download: bool = False, skip_xgboost: bool = False, skip_bert: bool = False, skip_tabtransformer: bool = False, test_mode: bool = False, sample_size: int = 100):
-    """Run complete inference pipeline"""
+def main(
+    skip_download: bool = False, 
+    skip_xgboost: bool = False, 
+    skip_bert: bool = False, 
+    skip_tabtransformer: bool = False, 
+    train_sustainability: bool = False,  # NEW FLAG
+    predict_sustainability: bool = False,  # NEW FLAG
+    test_mode: bool = False, 
+    sample_size: int = 100
+):
+    """Run complete inference pipeline with optional sustainability predictions"""
     print("🚀 Starting Polymer Prediction Inference Pipeline on Modal")
     print("=" * 60)
     if test_mode:
@@ -1146,6 +1597,17 @@ def main(skip_download: bool = False, skip_xgboost: bool = False, skip_bert: boo
     ensemble_result = create_ensemble.remote()
     print(f"   Result: {ensemble_result}")
     
+    # Step 6: Train Sustainability Models (NEW)
+    if train_sustainability:
+        print("\n🏗️ Step 6: Training Sustainability Models...")
+        train_sustainability_models.remote()
+    
+    # Step 7: Predict Sustainability Metrics (NEW)
+    if predict_sustainability:
+        print("\n🌿 Step 7: Predicting Sustainability Metrics...")
+        sust_result = run_sustainability_inference.remote()
+        print(f"   Result: {sust_result}")
+    
     print("\n" + "=" * 60)
     print("✅ Inference pipeline complete!")
     print("📊 Results saved to Modal Volume 'polymer-results'")
@@ -1154,4 +1616,6 @@ def main(skip_download: bool = False, skip_xgboost: bool = False, skip_bert: boo
     print("  modal volume get polymer-results submission1.csv submission1.csv")
     print("  modal volume get polymer-results submission2.csv submission2.csv")
     print("  modal volume get polymer-results submission3.csv submission3.csv")
+    if predict_sustainability:
+        print("  modal volume get polymer-results sustainability_predictions.csv sustainability_predictions.csv")
 
