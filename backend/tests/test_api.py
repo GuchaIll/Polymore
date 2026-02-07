@@ -16,6 +16,8 @@ def test_predict_valid_smiles():
     assert "flexibility" in data["data"]
     assert "degradability" in data["data"]
     assert "sustainability" in data["data"]
+    assert "sas_score" in data["data"]
+    assert "meta" in data["data"]
     
     # Check if values are within expected range (0-10)
     for key, value in data["data"].items():

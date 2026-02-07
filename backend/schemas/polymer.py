@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
 class HeuristicPredictedProperties(BaseModel):
@@ -6,6 +6,8 @@ class HeuristicPredictedProperties(BaseModel):
     flexibility: float
     degradability: float
     sustainability: float
+    sas_score: float
+    meta: Dict[str, Any]
 
 class Position(BaseModel):
     """3D position in canvas space."""
