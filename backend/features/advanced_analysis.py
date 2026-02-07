@@ -1,5 +1,6 @@
 import numpy as np
 import logging
+import sys
 from rdkit import Chem
 from rdkit.Chem import AllChem
 try:
@@ -9,11 +10,12 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-def analyze_molecule_high_compute(smiles: str) -> dict:
+def analyze_molecule_high_compute(smiles: str, progress_callback=None) -> dict:
     """
     Performs 'High Compute' analysis using Semi-Empirical Quantum Mechanics (GFN2-xTB).
     This calculates actual electronic properties, not just geometric shapes.
     """
+    if progress_callback: progress_callback(10, "Initializing analysis...")
     if Calculator is None:
         raise ImportError("tblite-python is not installed. specialized analysis unavilable.")
 
@@ -24,6 +26,7 @@ def analyze_molecule_high_compute(smiles: str) -> dict:
     
     mol = Chem.AddHs(mol)
     
+    if progress_callback: progress_callback(20, "Generating 3D conformers...")
     # Generate a decent starting guess (ETKDG)
     params = AllChem.ETKDGv3()
     embed_res = AllChem.EmbedMolecule(mol, params=params)
@@ -42,6 +45,7 @@ def analyze_molecule_high_compute(smiles: str) -> dict:
     # 2. COMPUTE: Geometry Optimization via GFN2-xTB
     # This moves atoms to their *true* quantum mechanical minimum energy positions.
     # Convert Angstrom to Bohr (approx factor 1.8897259886)
+    if progress_callback: progress_callback(50, "Running quantum mechanical calculation (GFN2-xTB)...")
     calc = Calculator("GFN2-xTB", atomic_numbers, positions * 1.8897259886) 
     
     # Ideally we'd optimize, but for speed/demo we might just do singlepoint or a loose opt.
@@ -49,6 +53,7 @@ def analyze_molecule_high_compute(smiles: str) -> dict:
     res = calc.singlepoint() 
     
     # 3. ANALYSIS: Extract Electronic Properties
+    if progress_callback: progress_callback(90, "Extracting electronic properties...")
     
     # A. STRENGTH PROXY: Dipole Moment & Polarity
     # Strong materials (like Kevlar/Nylon) often have high dipole moments 
