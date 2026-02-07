@@ -39,7 +39,11 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
     undoAction,
     redoAction,
     exportStructure,
+    exportAsJSON,
+    exportAsSMILES,
     optimizeStructure,
+    optimizePositions,
+    optimizeConnections,
     predictProperties,
     // Move tool functions
     startMove,
@@ -290,8 +294,12 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
           onRedo={redoAction}
           onToggleSnap={toggleSnap}
           onOptimize={optimizeStructure}
+          onOptimizePositions={optimizePositions}
+          onOptimizeConnections={optimizeConnections}
           onPredict={handlePredict}
           onExport={exportStructure}
+          onExportJSON={exportAsJSON}
+          onExportSMILES={exportAsSMILES}
           onToggleTheme={toggleTheme}
           onValidate={handleValidate}
           rdkitReady={rdkitReady}

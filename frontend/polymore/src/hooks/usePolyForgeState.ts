@@ -1,5 +1,11 @@
 import {useState, useCallback} from 'react';
 import { PolyForgeState, Molecule, PlacedMolecule, Position, Toast, ToolType, ViewMode, PredictedProperties } from '../types';
+import { 
+  optimizeStructure as runOptimization, 
+  getOptimizationSuggestions,
+  OptimizationSuggestion
+} from '../util/optimization';
+import { PolymerValidationResult } from '../util';
 
 
 // Grid boundary constants (grid is 20x20 centered at origin)
@@ -155,14 +161,10 @@ export function usePolyForgeState() {
           }
         : { x: clampedX, y: 0, z: clampedZ };
 
+      // Spread all molecule properties including extended fields
       const moleculeData: PlacedMolecule = {
+        ...mol,
         id: Date.now(),
-        name: mol.name,
-        formula: mol.formula,
-        smiles: mol.smiles,
-        icon: mol.icon,
-        weight: mol.weight,
-        color: mol.color,
         position: snappedPosition,
         connections: []
       };
@@ -300,7 +302,7 @@ export function usePolyForgeState() {
     });
   }, [showToast]);
 
-  const exportStructure = useCallback(() => {
+  const exportAsJSON = useCallback(() => {
     const data = {
       molecules: state.placedMolecules,
       timestamp: new Date().toISOString()
@@ -314,12 +316,104 @@ export function usePolyForgeState() {
     a.click();
     URL.revokeObjectURL(url);
 
-    showToast('Structure exported!');
+    showToast('Exported as JSON!');
   }, [state.placedMolecules, showToast]);
 
-  const optimizeStructure = useCallback(() => {
-    showToast('Optimizing structure... (simulated)');
-  }, [showToast]);
+  const exportAsSMILES = useCallback(() => {
+    if (state.placedMolecules.length === 0) {
+      showToast('No molecules to export!');
+      return;
+    }
+
+    // Generate SMILES string from placed molecules
+    // Combine all molecule SMILES with dots (disconnected structures)
+    const combinedSMILES = state.placedMolecules.map(m => m.smiles).join('.');
+    
+    const content = `# Polymer Structure SMILES Export\n# Generated: ${new Date().toISOString()}\n# Molecules: ${state.placedMolecules.length}\n\n${combinedSMILES}\n\n# Individual molecules:\n${state.placedMolecules.map(m => `# ${m.name}: ${m.smiles}`).join('\n')}`;
+
+    const blob = new Blob([content], { type: 'chemical/x-daylight-smiles' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'polymer_structure.smi';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showToast('Exported as SMILES!');
+  }, [state.placedMolecules, showToast]);
+
+  // Legacy export function that defaults to JSON
+  const exportStructure = useCallback(() => {
+    exportAsJSON();
+  }, [exportAsJSON]);
+
+  // Full optimization with all steps
+  const optimizeStructure = useCallback((validationResult?: PolymerValidationResult) => {
+    if (state.placedMolecules.length === 0) {
+      showToast('Add molecules first!');
+      return;
+    }
+
+    const result = runOptimization(state.placedMolecules, {
+      autoConnect: false,
+      validationResult
+    });
+
+    if (result.changes.length > 0) {
+      setState(prev => {
+        saveToHistory(result.molecules);
+        return { ...prev, placedMolecules: result.molecules };
+      });
+      showToast(result.summary);
+    } else {
+      showToast('Structure already optimized');
+    }
+  }, [state.placedMolecules, saveToHistory, showToast]);
+
+  // Optimize positions only (bond lengths and spacing)
+  const optimizePositions = useCallback(() => {
+    if (state.placedMolecules.length === 0) {
+      showToast('Add molecules first!');
+      return;
+    }
+
+    const result = runOptimization(state.placedMolecules, { autoConnect: false });
+    
+    if (result.changes.filter(c => c.type === 'position').length > 0) {
+      setState(prev => {
+        saveToHistory(result.molecules);
+        return { ...prev, placedMolecules: result.molecules };
+      });
+      showToast('Positions optimized');
+    } else {
+      showToast('Positions already optimal');
+    }
+  }, [state.placedMolecules, saveToHistory, showToast]);
+
+  // Auto-connect disconnected fragments
+  const optimizeConnections = useCallback(() => {
+    if (state.placedMolecules.length < 2) {
+      showToast('Need at least 2 molecules');
+      return;
+    }
+
+    const result = runOptimization(state.placedMolecules, { autoConnect: true });
+    
+    if (result.changes.filter(c => c.type === 'connection').length > 0) {
+      setState(prev => {
+        saveToHistory(result.molecules);
+        return { ...prev, placedMolecules: result.molecules };
+      });
+      showToast('Fragments connected');
+    } else {
+      showToast('All molecules already connected');
+    }
+  }, [state.placedMolecules, saveToHistory, showToast]);
+
+  // Get optimization suggestions
+  const getSuggestions = useCallback((validationResult?: PolymerValidationResult): OptimizationSuggestion[] => {
+    return getOptimizationSuggestions(state.placedMolecules, validationResult);
+  }, [state.placedMolecules]);
 
   const predictProperties = useCallback(async (): Promise<PredictedProperties | null> => {
     if (state.placedMolecules.length === 0) {
@@ -413,7 +507,12 @@ export function usePolyForgeState() {
     undoAction,
     redoAction,
     exportStructure,
+    exportAsJSON,
+    exportAsSMILES,
     optimizeStructure,
+    optimizePositions,
+    optimizeConnections,
+    getSuggestions,
     predictProperties,
     // Move tool functions
     startMove,

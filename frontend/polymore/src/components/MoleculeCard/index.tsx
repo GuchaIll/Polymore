@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Molecule } from '../../types';
 
 interface MoleculeCardProps {
@@ -16,6 +17,8 @@ const MoleculeCard: React.FC<MoleculeCardProps> = ({
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState({ top: 0, left: 0 });
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const handleDragStart = (e: React.DragEvent) => {
     setIsDragging(true);
@@ -29,11 +32,23 @@ const MoleculeCard: React.FC<MoleculeCardProps> = ({
     onDragEnd();
   };
 
+  const handleMouseEnter = () => {
+    if (cardRef.current) {
+      const rect = cardRef.current.getBoundingClientRect();
+      setTooltipPos({
+        top: rect.top,
+        left: rect.right + 8
+      });
+    }
+    setShowTooltip(true);
+  };
+
   // Build tooltip content from extended molecule fields
   const hasExtendedInfo = molecule.description || molecule.commonItems || molecule.sustainabilityImpact;
 
   return (
     <div
+      ref={cardRef}
       className={`
         relative bg-poly-light-bg dark:bg-poly-bg border-2 border-poly-light-border dark:border-poly-border rounded-xl p-3 cursor-grab
         transition-all text-center hover:border-poly-light-accent dark:hover:border-poly-accent hover:-translate-y-0.5
@@ -44,7 +59,7 @@ const MoleculeCard: React.FC<MoleculeCardProps> = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onClick={() => onSelect(molecule)}
-      onMouseEnter={() => setShowTooltip(true)}
+      onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShowTooltip(false)}
     >
       {/* Icon with molecule color background */}
@@ -57,9 +72,12 @@ const MoleculeCard: React.FC<MoleculeCardProps> = ({
       <div className="text-poly-light-text dark:text-white text-sm font-semibold mb-1 truncate">{molecule.name}</div>
       <div className="text-poly-light-muted dark:text-gray-500 text-xs">{molecule.formula}</div>
       
-      {/* Extended info tooltip */}
-      {showTooltip && hasExtendedInfo && (
-        <div className="absolute z-50 left-full ml-2 top-0 w-64 p-3 bg-poly-light-sidebar dark:bg-poly-card border border-poly-light-border dark:border-poly-border rounded-lg shadow-xl text-left pointer-events-none">
+      {/* Extended info tooltip - rendered via portal to escape overflow */}
+      {showTooltip && hasExtendedInfo && createPortal(
+        <div 
+          className="fixed z-[70] w-64 p-3 bg-poly-light-sidebar dark:bg-poly-card border border-poly-light-border dark:border-poly-border rounded-lg shadow-xl text-left pointer-events-none"
+          style={{ top: tooltipPos.top, left: tooltipPos.left }}
+        >
           <div className="text-poly-light-text dark:text-white text-sm font-bold mb-1">{molecule.name}</div>
           <div className="text-poly-light-muted dark:text-gray-400 text-xs mb-2">{molecule.smiles}</div>
           
@@ -94,7 +112,8 @@ const MoleculeCard: React.FC<MoleculeCardProps> = ({
               <span className="text-poly-light-text dark:text-gray-300">{molecule.commonItems.slice(0, 3).join(', ')}</span>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

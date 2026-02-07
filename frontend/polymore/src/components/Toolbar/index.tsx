@@ -1,5 +1,5 @@
-import React from 'react';
-import { Trash2, Undo2, Redo2, Save, Sun, Moon } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Trash2, Undo2, Redo2, Save, Sun, Moon, ChevronDown, FileJson, FileCode, Wand2, Move, Link2 } from 'lucide-react';
 
 interface ToolbarProps {
   gridSnap: boolean;
@@ -9,8 +9,12 @@ interface ToolbarProps {
   onRedo: () => void;
   onToggleSnap: () => void;
   onOptimize: () => void;
+  onOptimizePositions?: () => void;
+  onOptimizeConnections?: () => void;
   onPredict: () => void;
   onExport: () => void;
+  onExportJSON?: () => void;
+  onExportSMILES?: () => void;
   onToggleTheme: () => void;
   onValidate?: () => void;
   rdkitReady?: boolean;
@@ -24,12 +28,35 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onRedo,
   onToggleSnap,
   onOptimize,
+  onOptimizePositions,
+  onOptimizeConnections,
   onPredict,
   onExport,
+  onExportJSON,
+  onExportSMILES,
   onToggleTheme,
   onValidate,
   rdkitReady = false
 }) => {
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const [optimizeDropdownOpen, setOptimizeDropdownOpen] = useState(false);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
+  const optimizeDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+        setExportDropdownOpen(false);
+      }
+      if (optimizeDropdownRef.current && !optimizeDropdownRef.current.contains(event.target as Node)) {
+        setOptimizeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const buttonClass = "py-2 px-4 border-none rounded-md bg-poly-light-border dark:bg-poly-border text-poly-light-text dark:text-white cursor-pointer text-sm transition-all hover:bg-poly-light-accent hover:text-white dark:hover:bg-poly-accent";
   const dangerButtonClass = "py-2 px-4 border-none rounded-md bg-poly-light-border dark:bg-poly-border text-poly-light-text dark:text-white cursor-pointer text-sm transition-all hover:bg-poly-light-danger hover:text-white dark:hover:bg-poly-danger";
 
@@ -59,7 +86,51 @@ const Toolbar: React.FC<ToolbarProps> = ({
       <div className="w-px h-[30px] bg-poly-light-border dark:bg-poly-border" />
 
       <div className="flex items-center gap-2">
-        <button className={buttonClass} onClick={onOptimize}>Optimize</button>
+        {/* Optimize dropdown */}
+        <div className="relative" ref={optimizeDropdownRef}>
+          <button 
+            className={`${buttonClass} flex items-center gap-1.5`}
+            onClick={() => setOptimizeDropdownOpen(!optimizeDropdownOpen)}
+          >
+            <Wand2 className="w-4 h-4" /> Optimize <ChevronDown className={`w-3 h-3 transition-transform ${optimizeDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {optimizeDropdownOpen && (
+            <div className="absolute top-full left-0 mt-1 w-48 bg-poly-light-sidebar dark:bg-poly-sidebar border border-poly-light-border dark:border-poly-border rounded-lg shadow-lg z-50 overflow-hidden">
+              <button
+                className="w-full px-3 py-2 text-left text-sm text-poly-light-text dark:text-white hover:bg-poly-light-border dark:hover:bg-poly-border flex items-center gap-2 transition-colors"
+                onClick={() => {
+                  onOptimize();
+                  setOptimizeDropdownOpen(false);
+                }}
+              >
+                <Wand2 className="w-4 h-4 text-purple-500" /> Optimize All
+              </button>
+              {onOptimizePositions && (
+                <button
+                  className="w-full px-3 py-2 text-left text-sm text-poly-light-text dark:text-white hover:bg-poly-light-border dark:hover:bg-poly-border flex items-center gap-2 transition-colors"
+                  onClick={() => {
+                    onOptimizePositions();
+                    setOptimizeDropdownOpen(false);
+                  }}
+                >
+                  <Move className="w-4 h-4 text-blue-500" /> Optimize Positions
+                </button>
+              )}
+              {onOptimizeConnections && (
+                <button
+                  className="w-full px-3 py-2 text-left text-sm text-poly-light-text dark:text-white hover:bg-poly-light-border dark:hover:bg-poly-border flex items-center gap-2 transition-colors"
+                  onClick={() => {
+                    onOptimizeConnections();
+                    setOptimizeDropdownOpen(false);
+                  }}
+                >
+                  <Link2 className="w-4 h-4 text-emerald-500" /> Auto-Connect
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         {onValidate && (
           <button 
             className={`${buttonClass} ${!rdkitReady ? 'opacity-50 cursor-not-allowed' : ''}`} 
@@ -76,9 +147,37 @@ const Toolbar: React.FC<ToolbarProps> = ({
       <div className="w-px h-[30px] bg-poly-light-border dark:bg-poly-border" />
 
       <div className="flex items-center gap-2">
-        <button className={`${buttonClass} flex items-center gap-1.5`} onClick={onExport}>
-          <Save className="w-4 h-4" /> Export
-        </button>
+        <div className="relative" ref={exportDropdownRef}>
+          <button 
+            className={`${buttonClass} flex items-center gap-1.5`} 
+            onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+          >
+            <Save className="w-4 h-4" /> Export <ChevronDown className={`w-3 h-3 transition-transform ${exportDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {exportDropdownOpen && (
+            <div className="absolute top-full left-0 mt-1 w-40 bg-poly-light-sidebar dark:bg-poly-sidebar border border-poly-light-border dark:border-poly-border rounded-lg shadow-lg z-50 overflow-hidden">
+              <button
+                className="w-full px-3 py-2 text-left text-sm text-poly-light-text dark:text-white hover:bg-poly-light-border dark:hover:bg-poly-border flex items-center gap-2 transition-colors"
+                onClick={() => {
+                  onExportJSON ? onExportJSON() : onExport();
+                  setExportDropdownOpen(false);
+                }}
+              >
+                <FileJson className="w-4 h-4 text-blue-500" /> As JSON
+              </button>
+              <button
+                className="w-full px-3 py-2 text-left text-sm text-poly-light-text dark:text-white hover:bg-poly-light-border dark:hover:bg-poly-border flex items-center gap-2 transition-colors"
+                onClick={() => {
+                  onExportSMILES ? onExportSMILES() : onExport();
+                  setExportDropdownOpen(false);
+                }}
+              >
+                <FileCode className="w-4 h-4 text-emerald-500" /> As SMILES
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="w-px h-[30px] bg-poly-light-border dark:bg-poly-border" />

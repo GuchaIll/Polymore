@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { BarChart3, Leaf } from 'lucide-react';
 import { PlacedMolecule, HeuristicPredictedProperties } from '../../types';
 import { PolymerValidationResult } from '../../util';
@@ -30,7 +30,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   );
 
   return (
-    <div className="absolute bottom-5 right-5 w-[300px] bg-poly-light-sidebar/95 dark:bg-poly-sidebar/95 border-2 border-poly-light-border dark:border-poly-border rounded-xl p-4 backdrop-blur-sm">
+    <div className="absolute bottom-5 right-5 w-[300px] bg-poly-light-sidebar/95 dark:bg-poly-sidebar/95 border-2 border-poly-light-border dark:border-poly-border rounded-xl p-4 backdrop-blur-sm z-30">
       <h3 className="text-poly-light-accent dark:text-poly-danger text-sm font-bold mb-3 uppercase flex items-center gap-2">
         <BarChart3 className="w-4 h-4" /> Properties
       </h3>
