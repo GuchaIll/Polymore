@@ -14,7 +14,7 @@
  */
 
 import { PlacedMolecule, Position } from "../types";
-import { predictTier1 } from "../services/services";
+import { predictTier1, predictTier2 } from "../services/services";
 
 // =============================================================================
 // VALIDATION RULE DEFINITIONS
@@ -1808,38 +1808,87 @@ export const validatePolymerComprehensive = async (
 };
 
 /**
- * API endpoint for property prediction (Tier 1 - heuristics)
- * Calls the backend /predict/tier-1 endpoint
+ * API endpoint for property prediction combining Tier 1 (heuristics) and Tier 2 (physics-based)
+ * Calls both /predict/tier-1 and /predict/tier-2 endpoints and averages results 50/50
+ * Both tiers return values in 0-10 scale
  */
 export const predictPropertiesFromBackend = async (
     smiles: string
-): Promise<{ success: boolean; properties?: Record<string, number>; error?: string }> => {
+): Promise<{ success: boolean; properties?: Record<string, number>; error?: string; tier1Only?: boolean }> => {
     try {
-        const response = await predictTier1(smiles);
+        // Call both Tier 1 and Tier 2 in parallel
+        const [tier1Response, tier2Response] = await Promise.allSettled([
+            predictTier1(smiles),
+            predictTier2(smiles)
+        ]);
         
-        console.log('Raw API response:', JSON.stringify(response, null, 2));
+        console.log('Tier 1 response:', tier1Response);
+        console.log('Tier 2 response:', tier2Response);
         
-        // Check if API returned success status (200 = success)
-        if (response.status !== 200 || !response.data) {
-            console.log('API status check failed:', { status: response.status, data: response.data });
+        // Extract Tier 1 data
+        let tier1Data: { strength: number; flexibility: number; degradability: number; sustainability: number; sas_score?: number } | null = null;
+        if (tier1Response.status === 'fulfilled' && tier1Response.value.status === 200 && tier1Response.value.data) {
+            tier1Data = tier1Response.value.data;
+        }
+        
+        // Extract Tier 2 data
+        let tier2Data: { strength: number; flexibility: number; degradability: number; sustainability: number } | null = null;
+        if (tier2Response.status === 'fulfilled' && tier2Response.value.status === 200 && tier2Response.value.data) {
+            tier2Data = tier2Response.value.data as any;
+        }
+        
+        // If neither succeeded, return error
+        if (!tier1Data && !tier2Data) {
+            const errorMsg = tier1Response.status === 'rejected' 
+                ? tier1Response.reason?.message 
+                : (tier1Response.value as any)?.error || 'Both prediction tiers failed';
             return {
                 success: false,
-                error: response.error || response.message || 'Prediction failed'
+                error: errorMsg
             };
         }
         
-        // Map the TierOneAnalysis response to our expected format
-        // Backend returns values in 0-100 scale based on the API design
-        const data = response.data;
+        // Calculate composite scores (50/50 average if both available, otherwise use available tier)
+        let compositeProperties: Record<string, number>;
+        let tier1Only = false;
+        
+        if (tier1Data && tier2Data) {
+            // Both available - average 50/50
+            compositeProperties = {
+                strength: (tier1Data.strength + tier2Data.strength) / 2,
+                flexibility: (tier1Data.flexibility + tier2Data.flexibility) / 2,
+                degradability: (tier1Data.degradability + tier2Data.degradability) / 2,
+                sustainability: (tier1Data.sustainability + tier2Data.sustainability) / 2,
+                sas_score: tier1Data.sas_score ?? 5 // SAS score only from Tier 1
+            };
+            console.log('Composite (50/50 Tier1+Tier2):', compositeProperties);
+        } else if (tier1Data) {
+            // Only Tier 1 available
+            compositeProperties = {
+                strength: tier1Data.strength,
+                flexibility: tier1Data.flexibility,
+                degradability: tier1Data.degradability,
+                sustainability: tier1Data.sustainability,
+                sas_score: tier1Data.sas_score ?? 5
+            };
+            tier1Only = true;
+            console.log('Using Tier 1 only:', compositeProperties);
+        } else {
+            // Only Tier 2 available
+            compositeProperties = {
+                strength: tier2Data!.strength,
+                flexibility: tier2Data!.flexibility,
+                degradability: tier2Data!.degradability,
+                sustainability: tier2Data!.sustainability,
+                sas_score: 5 // Default when only Tier 2
+            };
+            console.log('Using Tier 2 only:', compositeProperties);
+        }
+        
         return {
             success: true,
-            properties: {
-                strength: data.strength,
-                flexibility: data.flexibility,
-                degradability: data.degradability,
-                sustainability: data.sustainability,
-                sas_score: data.sas_score
-            }
+            properties: compositeProperties,
+            tier1Only
         };
     } catch (error: any) {
         return {

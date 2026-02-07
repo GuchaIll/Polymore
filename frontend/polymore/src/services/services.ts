@@ -2,7 +2,7 @@ import client from '../api/client';
 import {
     ResponseModel,
     TierOneAnalysis,
-    TaskSubmission,
+    TierTwoAnalysis,
     Task,
     SmilesValidationResponse,
     ValidatePolymerRequest,
@@ -22,11 +22,12 @@ export const predictTier1 = async (smiles: string): Promise<ResponseModel<TierOn
 };
 
 /**
- * Submit a high-compute analysis task (Tier 2).
+ * Predict polymer properties using GNN model (Tier 2).
+ * Now synchronous - returns analysis directly.
  */
-export const predictTier2 = async (smiles: string): Promise<ResponseModel<TaskSubmission>> => {
+export const predictTier2 = async (smiles: string): Promise<ResponseModel<TierTwoAnalysis>> => {
     try {
-        const response = await client.post<ResponseModel<TaskSubmission>>('/predict/tier-2', { smiles });
+        const response = await client.post<ResponseModel<TierTwoAnalysis>>('/predict/tier-2', { smiles });
         return response.data;
     } catch (error: any) {
         throw handleApiError(error);

@@ -4,9 +4,116 @@
  * Features: Radar chart with hover interactions, animated cards, tooltips
  */
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { ArrowLeft, TrendingUp, Leaf, Recycle, FlaskConical, ChevronDown } from 'lucide-react';
 import { useTheme } from '../../hooks/useTheme';
+
+// Material type for comparison cards
+interface MaterialData {
+  name: string;
+  desc: string;
+  strength: number;
+  elasticity: number;
+  thermal: number;
+  flexibility: number;
+  ecoScore: number;
+  biodegradable: number;
+  degradability: number;
+  sustainability: number;
+}
+
+// Full property set for display
+interface FullProperties {
+  strength: number;
+  elasticity: number;
+  thermal: number;
+  flexibility: number;
+  ecoScore: number;
+  biodegradable: number;
+  degradability: number;
+  sustainability: number;
+}
+
+/**
+ * Helper: Generate derived properties from the 4 core backend properties
+ * Backend returns: strength, flexibility, degradability, sustainability (0-100)
+ * We derive: elasticity, thermal, ecoScore, biodegradable
+ */
+const deriveFullProperties = (props: {
+  strength?: number;
+  flexibility?: number;
+  degradability?: number;
+  sustainability?: number;
+}): FullProperties => {
+  const s = props.strength ?? 0;
+  const f = props.flexibility ?? 0;
+  const d = props.degradability ?? 0;
+  const sus = props.sustainability ?? 0;
+
+  // Elasticity: inverse relationship with strength + flexibility contribution
+  // High flexibility + moderate strength = high elasticity
+  const elasticity = Math.min(100, Math.max(0, 
+    (f * 0.6) + ((100 - s) * 0.3) + (d * 0.1)
+  ));
+
+  // Thermal resistance: correlated with strength, inverse with flexibility
+  // Strong rigid polymers tend to have better thermal resistance
+  const thermal = Math.min(100, Math.max(0,
+    (s * 0.5) + ((100 - f) * 0.3) + (sus * 0.2)
+  ));
+
+  // Eco Score: weighted combination of sustainability and degradability
+  const ecoScore = Math.min(100, Math.max(0,
+    (sus * 0.5) + (d * 0.4) + ((100 - s) * 0.1)
+  ));
+
+  // Biodegradable: primarily from degradability with sustainability boost
+  const biodegradable = Math.min(100, Math.max(0,
+    (d * 0.7) + (sus * 0.3)
+  ));
+
+  return {
+    strength: s,
+    elasticity: Math.round(elasticity),
+    thermal: Math.round(thermal),
+    flexibility: f,
+    ecoScore: Math.round(ecoScore),
+    biodegradable: Math.round(biodegradable),
+    degradability: d,
+    sustainability: sus
+  };
+};
+
+/**
+ * Helper: Calculate application suitability scores based on material properties
+ */
+const calculateApplicationSuitability = (
+  props: FullProperties,
+  appName: string
+): number => {
+  // Application-specific weight profiles
+  const weights: Record<string, { str: number; flex: number; sus: number; deg: number; eco: number; therm: number }> = {
+    'Packaging': { str: 0.15, flex: 0.2, sus: 0.25, deg: 0.25, eco: 0.1, therm: 0.05 },
+    'Medical Devices': { str: 0.3, flex: 0.15, sus: 0.15, deg: 0.2, eco: 0.1, therm: 0.1 },
+    'Construction': { str: 0.4, flex: 0.05, sus: 0.15, deg: 0.1, eco: 0.1, therm: 0.2 },
+    'Textiles': { str: 0.1, flex: 0.35, sus: 0.2, deg: 0.15, eco: 0.15, therm: 0.05 },
+    'Electronics': { str: 0.2, flex: 0.1, sus: 0.15, deg: 0.1, eco: 0.1, therm: 0.35 },
+    'Agriculture': { str: 0.1, flex: 0.15, sus: 0.3, deg: 0.3, eco: 0.1, therm: 0.05 },
+    'default': { str: 0.2, flex: 0.15, sus: 0.25, deg: 0.2, eco: 0.1, therm: 0.1 }
+  };
+
+  const w = weights[appName] || weights['default'];
+  const score = (
+    props.strength * w.str +
+    props.flexibility * w.flex +
+    props.sustainability * w.sus +
+    props.degradability * w.deg +
+    props.ecoScore * w.eco +
+    props.thermal * w.therm
+  );
+
+  return Math.round(Math.min(100, Math.max(0, score)));
+};
 
 // Hook to detect when element is visible in viewport
 const useScrollVisibility = (threshold: number = 0.2) => {
@@ -53,10 +160,18 @@ interface ResultsPageProps {
   }>;
 }
 
-// Animated counter hook
+// Animated counter hook - resets and re-animates when value changes
 const useAnimatedCounter = (end: number, duration: number = 1500, delay: number = 0) => {
   const [count, setCount] = useState(0);
+  const prevEndRef = useRef(end);
+
   useEffect(() => {
+    // Reset count when end value changes significantly
+    if (Math.abs(prevEndRef.current - end) > 0.5) {
+      setCount(0);
+    }
+    prevEndRef.current = end;
+
     const timeout = setTimeout(() => {
       let start = 0;
       const increment = end / (duration / 16);
@@ -97,15 +212,17 @@ interface RadarTooltip {
   color: string;
 }
 
-const RadarChart: React.FC<{ properties: ResultsPageProps['properties']; isDark: boolean }> = ({ properties, isDark }) => {
+const RadarChart: React.FC<{ properties: FullProperties; isDark: boolean; animationKey?: number }> = ({ properties, isDark, animationKey = 0 }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [tooltip, setTooltip] = useState<RadarTooltip>({ visible: false, x: 0, y: 0, label: '', value: 0, color: '' });
   const [isAnimated, setIsAnimated] = useState(false);
   
+  // Re-trigger animation when properties or animationKey changes
   useEffect(() => {
+    setIsAnimated(false);
     const timer = setTimeout(() => setIsAnimated(true), 100);
     return () => clearTimeout(timer);
-  }, []);
+  }, [animationKey, properties.strength, properties.flexibility, properties.degradability, properties.sustainability]);
 
   const values = radarFields.map(f => Math.max(0, Math.min(1, (properties as any)[f.key] / 100)));
   const cx = 160, cy = 160, r = 110;
@@ -459,20 +576,6 @@ const ApplicationCard: React.FC<{
   );
 };
 
-// Material type for comparison cards
-interface MaterialData {
-  name: string;
-  desc: string;
-  strength: number;
-  elasticity: number;
-  thermal: number;
-  flexibility: number;
-  ecoScore: number;
-  biodegradable: number;
-  degradability: number;
-  sustainability: number;
-}
-
 // Plastic comparison card with hover and selection
 const PlasticCard: React.FC<{ 
   plastic: MaterialData; 
@@ -538,19 +641,15 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
   const { ref: sustainabilityRef, isVisible: sustainabilityVisible } = useScrollVisibility(0.15);
   const [selectedMaterialIndex, setSelectedMaterialIndex] = useState(0); // 0 = Current Polymer
 
+  // Derive full properties from backend's 4 core values for "Your Polymer"
+  const derivedPolymerProps = useMemo(() => deriveFullProperties(properties), [properties]);
+
   // Build materials array with Current Polymer as first entry
-  const materialsComparison: MaterialData[] = React.useMemo(() => [
+  const materialsComparison: MaterialData[] = useMemo(() => [
     {
       name: 'Your Polymer',
       desc: 'Your designed polymer with predicted properties.',
-      strength: properties.strength || 0,
-      elasticity: properties.elasticity || 0,
-      thermal: properties.thermal || 0,
-      flexibility: properties.flexibility || 0,
-      ecoScore: properties.ecoScore || 0,
-      biodegradable: properties.biodegradable || 0,
-      degradability: properties.degradability || 0,
-      sustainability: properties.sustainability || 0
+      ...derivedPolymerProps
     },
     {
       name: 'PLA',
@@ -588,11 +687,11 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
       degradability: 5,
       sustainability: 35
     }
-  ], [properties]);
+  ], [derivedPolymerProps]);
 
   // Get currently selected material's properties
   const selectedMaterial = materialsComparison[selectedMaterialIndex];
-  const displayProperties = {
+  const displayProperties: FullProperties = useMemo(() => ({
     strength: selectedMaterial.strength,
     elasticity: selectedMaterial.elasticity,
     thermal: selectedMaterial.thermal,
@@ -601,39 +700,33 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
     biodegradable: selectedMaterial.biodegradable,
     degradability: selectedMaterial.degradability,
     sustainability: selectedMaterial.sustainability
-  };
+  }), [selectedMaterial]);
 
-  // Calculate application suitability based on selected material
-  const calculatedApplications = React.useMemo(() => {
-    const mat = materialsComparison[selectedMaterialIndex];
-    return applications.map(app => {
-      // Calculate suitability based on material properties
-      // This is a simple weighted average - adjust weights per application type
-      const avgScore = (
-        mat.strength * 0.2 +
-        mat.flexibility * 0.2 +
-        mat.sustainability * 0.3 +
-        mat.degradability * 0.15 +
-        mat.ecoScore * 0.15
-      );
-      return {
-        ...app,
-        suitability: Math.round(avgScore)
-      };
-    });
-  }, [selectedMaterialIndex, materialsComparison, applications]);
+  // Calculate application suitability based on selected material using helper
+  const calculatedApplications = useMemo(() => {
+    return applications.map(app => ({
+      ...app,
+      suitability: calculateApplicationSuitability(displayProperties, app.name)
+    }));
+  }, [displayProperties, applications]);
   
+  // Reset and re-animate bars when material selection changes
   useEffect(() => {
-    // Staggered animation for suitability bars
+    // First reset all bars to 0
+    barRefs.current.forEach(ref => {
+      if (ref) ref.style.width = '0%';
+    });
+    
+    // Then animate to new values
     calculatedApplications.forEach((app, i) => {
       setTimeout(() => {
         const ref = barRefs.current[i];
         if (ref) {
           ref.style.width = `${app.suitability}%`;
         }
-      }, 300 + i * 150);
+      }, 100 + i * 100);
     });
-  }, [calculatedApplications]);
+  }, [selectedMaterialIndex, calculatedApplications]);
 
   // Handle scroll to hide indicator
   useEffect(() => {
@@ -740,10 +833,10 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
                         transition-all duration-300 hover:shadow-xl hover:border-emerald-500/40 overflow-hidden">
           <h3 className="text-base font-semibold mb-2 text-[#2d6a4f] dark:text-emerald-400 flex items-center gap-2">
             <TrendingUp className="w-4 h-4" />
-            Property Profile
+            Property Profile {selectedMaterialIndex > 0 ? `(${selectedMaterial.name})` : ''}
           </h3>
           <div className="flex items-center justify-center overflow-visible">
-            <RadarChart properties={displayProperties} isDark={isDark} />
+            <RadarChart properties={displayProperties} isDark={isDark} animationKey={selectedMaterialIndex} />
           </div>
         </div>
 
@@ -755,12 +848,12 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
             Potential Applications
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-            {applications.length === 0 ? (
+            {calculatedApplications.length === 0 ? (
               <div className="col-span-2 text-center text-gray-400 dark:text-gray-500 py-8">
                 No application data available
               </div>
             ) : (
-              applications.map((app, i) => (
+              calculatedApplications.map((app, i) => (
                 <ApplicationCard 
                   key={app.name} 
                   app={app} 
@@ -803,7 +896,7 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
         </h3>
         <div className="flex gap-3 md:gap-5 mb-4 flex-wrap justify-center">
           <StatCard
-            value={properties.sustainability || 0}
+            value={displayProperties.sustainability || 0}
             label="Sustainability Score"
             delay={sustainabilityVisible ? 200 : 99999}
             gradientFrom={isDark ? 'rgba(16, 185, 129, 0.3)' : '#a8e6cf'}
@@ -814,7 +907,7 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
             icon={<Leaf className="w-5 h-5" />}
           />
           <StatCard
-            value={properties.biodegradable || 0}
+            value={displayProperties.biodegradable || 0}
             label="Biodegradable Score"
             delay={sustainabilityVisible ? 350 : 99999}
             gradientFrom={isDark ? 'rgba(20, 184, 166, 0.3)' : '#b2dfdb'}
@@ -825,7 +918,7 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
             icon={<Recycle className="w-5 h-5" />}
           />
           <StatCard
-            value={properties.degradability || 0}
+            value={displayProperties.degradability || 0}
             label="Degradability Score"
             delay={sustainabilityVisible ? 500 : 99999}
             gradientFrom={isDark ? 'rgba(6, 182, 212, 0.3)' : '#95e1d3'}
@@ -836,7 +929,7 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applicat
             icon={<TrendingUp className="w-5 h-5" />}
           />
           <StatCard
-            value={Math.floor((properties.ecoScore || 0) * 0.1)}
+            value={Math.floor((displayProperties.ecoScore || 0) * 0.1)}
             label="Experiments Saved"
             suffix=""
             delay={sustainabilityVisible ? 650 : 99999}

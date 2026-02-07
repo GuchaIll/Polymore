@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { predictTier2 } from '../services/services';
-import { TaskSubmission } from '../types/api';
+import { TierTwoAnalysis } from '../types/api';
 
 interface UseServiceState<T> {
     data: T | null;
@@ -9,7 +9,7 @@ interface UseServiceState<T> {
 }
 
 export const useTierTwoAnalysis = () => {
-    const [state, setState] = useState<UseServiceState<TaskSubmission>>({
+    const [state, setState] = useState<UseServiceState<TierTwoAnalysis>>({
         data: null,
         loading: false,
         error: null,

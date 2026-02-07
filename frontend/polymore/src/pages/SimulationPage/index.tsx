@@ -104,13 +104,13 @@ const VolumetricPolymerAnimation: React.FC<{ isRunning: boolean }> = ({ isRunnin
       uniform float u_speed;
       uniform int u_frame;
 
-      #define MAX_STEPS 40
+      #define MAX_STEPS 30
       #define MAX_STEPS_LIGHTS 3
       #define ABSORPTION_COEFFICIENT 1.5
       #define SCATTERING_ANISO 0.4
       #define PI 3.14159265359
-      #define MARCH_SIZE 0.18
-      #define BASE_AMBIENT 0.05
+      #define MARCH_SIZE 0.0.2
+      #define BASE_AMBIENT 0.1
 
       const vec3 SUN_POSITION = vec3(2.0, 1.5, 2.0);
 
