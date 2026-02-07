@@ -36,6 +36,8 @@ from core.exceptions import (
     ServerException,
 )
 from features.heuristics import predict_properties
+from features.advanced_analysis import analyze_molecule_high_compute
+from schemas.analysis import AnalysisRequest, AnalysisResponse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -125,6 +127,26 @@ def predict_heuristics(request: SmiRequest):
         )
     except Exception as e:
         logger.error(f"Prediction failed for SMILES {request.smiles}: {e}")
+        raise ServerException(detail=str(e))
+
+@app.post("/api/analyze/high-compute", response_model=ResponseModel[AnalysisResponse])
+def analyze_high_compute(request: AnalysisRequest):
+    """
+    Perform high-compute analysis on a molecule using GFN2-xTB.
+    """
+    try:
+        results = analyze_molecule_high_compute(request.smiles)
+        return ResponseModel(
+            status=200,
+            message="Analysis successful",
+            data=AnalysisResponse(**results)
+        )
+    except ImportError as e:
+        raise ServerException(detail="High-compute analysis unavailable: " + str(e))
+    except ValueError as e:
+        raise BadRequestException(detail=str(e))
+    except Exception as e:
+        logger.error(f"High-compute analysis failed: {e}")
         raise ServerException(detail=str(e))
 
 @app.post("/api/validate-smiles", response_model=ResponseModel[SmilesValidationResponse])
