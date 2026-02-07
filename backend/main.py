@@ -71,7 +71,7 @@ async def startup_event():
 # CORS middleware for frontend communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://spotme.life", "https://spotme.life", "http://api.spotme.life", "https://api.spotme.life", "http://localhost:8000", "https://localhost:8000"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "https://localhost:3000", "https://localhost:3001", "http://spotme.life", "https://spotme.life", "http://api.spotme.life", "https://api.spotme.life", "http://localhost:8000", "https://localhost:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
