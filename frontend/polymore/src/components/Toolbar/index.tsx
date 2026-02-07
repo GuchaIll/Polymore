@@ -75,14 +75,14 @@ const Toolbar: React.FC<ToolbarProps> = ({
   return (
     <div className="h-[50px] bg-poly-light-sidebar dark:bg-poly-sidebar border-b-2 border-poly-light-border dark:border-poly-border flex items-center px-5 gap-4">
       <div className="flex items-center gap-2">
-        <button className={`${dangerButtonClass} flex items-center gap-1.5`} onClick={onClear}>
-          <Trash2 className="w-4 h-4" /> Clear
+        <button className={`${dangerButtonClass} flex items-center gap-1.5`} onClick={onClear} title="Clear">
+          <Trash2 className="w-4 h-4" />
         </button>
-        <button className={`${buttonClass} flex items-center gap-1.5`} onClick={onUndo}>
-          <Undo2 className="w-4 h-4" /> Undo
+        <button className={`${buttonClass} flex items-center gap-1.5`} onClick={onUndo} title="Undo">
+          <Undo2 className="w-4 h-4" />
         </button>
-        <button className={`${buttonClass} flex items-center gap-1.5`} onClick={onRedo}>
-          <Redo2 className="w-4 h-4" /> Redo
+        <button className={`${buttonClass} flex items-center gap-1.5`} onClick={onRedo} title="Redo">
+          <Redo2 className="w-4 h-4" />
         </button>
       </div>
 

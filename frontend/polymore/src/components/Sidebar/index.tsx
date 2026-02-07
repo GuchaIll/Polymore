@@ -39,7 +39,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [smilesInput, setSmilesInput] = useState('');
   return (
-    <div className="w-[280px] bg-poly-light-sidebar dark:bg-poly-sidebar border-r-2 border-poly-light-border dark:border-poly-border flex flex-col overflow-hidden">
+    <div className="w-[310px] bg-poly-light-sidebar dark:bg-poly-sidebar border-r-2 border-poly-light-border dark:border-poly-border flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-5 bg-gradient-to-br from-poly-light-accent to-emerald-400 dark:from-poly-accent dark:to-poly-accent2 text-white">
         <h1 className="text-2xl font-bold mb-1 flex items-center gap-2">
@@ -54,13 +54,13 @@ const Sidebar: React.FC<SidebarProps> = ({
         <h3 className="text-poly-light-accent dark:text-poly-danger text-sm font-bold mb-3 uppercase tracking-wider">
           Tools
         </h3>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap">
           {tools.map(tool => (
             <button
               key={tool.id}
               className={`
-                flex-1 min-w-[70px] py-2.5 px-2 border-2 rounded-lg
-                cursor-pointer transition-all text-xs text-center
+                flex-1 min-w-[50px] py-1.5 px-1.5 border-2 rounded-md
+                cursor-pointer transition-all text-[10px] text-center
                 flex flex-col items-center justify-center
                 ${currentTool === tool.id
                   ? 'border-poly-light-accent dark:border-poly-danger bg-poly-light-accent dark:bg-poly-danger text-white'
@@ -69,7 +69,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               `}
               onClick={() => onToolChange(tool.id)}
             >
-              <tool.icon className="w-5 h-5 mb-1" />
+              <tool.icon className="w-4 h-4 mb-0.5" />
               {tool.label}
             </button>
           ))}

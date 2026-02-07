@@ -50,7 +50,7 @@ export const moleculeLibrary: MoleculeLibrary = {
       formula: 'H', 
       smiles: '[H]', 
       icon: 'H', 
-      color: '#FFFFFF', 
+      color: '#A0D8FF', 
       weight: 1,
       description: 'Saturates carbon chains, affects flexibility and reactivity',
       category: 'basic'

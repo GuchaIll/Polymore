@@ -1937,7 +1937,7 @@ export const getErrorSuggestion = (code: ValidationRuleCode): string => {
 // Element color mapping for visualization
 const ELEMENT_COLORS: Record<string, string> = {
     C: '#404040',   // Carbon - dark gray
-    H: '#FFFFFF',   // Hydrogen - white
+    H: '#A0D8FF',   // Hydrogen - light cyan
     O: '#FF0000',   // Oxygen - red
     N: '#0000FF',   // Nitrogen - blue
     S: '#FFFF00',   // Sulfur - yellow
