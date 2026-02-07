@@ -82,13 +82,16 @@ def init_db(max_retries: int = 5, retry_delay: int = 2):
             
             if attempt < max_retries - 1:
                 logger.warning(
-                    f"Database connection failed (attempt {attempt + 1}/{max_retries}): {e}. "
+                    f"Database connection failed (attempt {attempt + 1}/{max_retries}): {type(e).__name__}. "
                     f"Retrying in {wait_time} seconds..."
                 )
                 time.sleep(wait_time)
             else:
-                logger.error(f"Failed to initialize database after {max_retries} attempts: {e}")
+                logger.error(
+                    f"Failed to initialize database after {max_retries} attempts: {type(e).__name__}. "
+                    f"Check DATABASE_URL and database availability."
+                )
                 raise
         except Exception as e:
-            logger.error(f"Failed to initialize database: {e}")
+            logger.error(f"Failed to initialize database: {type(e).__name__}")
             raise

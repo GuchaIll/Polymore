@@ -71,8 +71,11 @@ async def startup_event():
             init_db()
             logger.info("Database schema initialized")
         except Exception as e:
-            logger.error(f"Database initialization failed: {e}")
-            logger.warning("Application starting without database initialization")
+            logger.warning(
+                f"Database initialization failed: {type(e).__name__}. "
+                f"Application starting without database initialization. "
+                f"Check database connectivity or set DB_INIT_ON_STARTUP=false to skip this step."
+            )
     else:
         logger.info("Database initialization skipped (DB_INIT_ON_STARTUP=false)")
 
