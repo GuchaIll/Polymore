@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any, Optional
 import os
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 
 from rdkit import Chem
 from rdkit.Chem import Descriptors, rdMolDescriptors
@@ -199,7 +200,13 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
     logger.info(f"Checking task status for: {task_id}")
     
     # Try to get task from database first
-    db_task = db.query(Task).filter(Task.task_id == task_id).first()
+    db_task = None
+    try:
+        db_task = db.query(Task).filter(Task.task_id == task_id).first()
+    except SQLAlchemyError as e:
+        # Log DB error and fall back to Celery backend
+        logger.warning(f"Database error when querying task {task_id}: {e}")
+        db_task = None
     
     if db_task:
         # Use database record
@@ -218,7 +225,7 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
             data=response_data
         )
     else:
-        # Fallback to Celery result backend (for backward compatibility)
+        # Fallback to Celery result backend (for backward compatibility or DB errors)
         task_result = AsyncResult(task_id, app=celery_app)
         
         response_data = TaskStatusResponse(
