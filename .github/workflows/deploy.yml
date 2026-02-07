@@ -15,6 +15,13 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
+      # NEW STEP: Convert repository owner to lowercase
+      - name: Lowercase Repository Owner
+        run: |
+          echo "OWNER_LC=${OWNER,,}" >>${GITHUB_ENV}
+        env:
+          OWNER: '${{ github.repository_owner }}'
+
       - name: Login to GHCR
         uses: docker/login-action@v2
         with:
@@ -28,7 +35,8 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/polymore-backend:latest
+          # Use the new lowercase environment variable here
+          tags: ghcr.io/${{ env.OWNER_LC }}/polymore-backend:latest
 
       # Build & Push Frontend
       - name: Build and Push Frontend
@@ -36,7 +44,8 @@ jobs:
         with:
           context: ./frontend
           push: true  
-          tags: ghcr.io/${{ github.repository_owner }}/polymore-frontend:latest
+          # And here
+          tags: ghcr.io/${{ env.OWNER_LC }}/polymore-frontend:latest
 
       # Copy docker-compose file to VPS
       - name: Copy Compose File to VPS
