@@ -36,6 +36,6 @@ def test_predict_error():
     assert response.status_code == 500
     data = response.json()
     assert data["status"] == 500
-    assert "Error loading" in data["message"]
+    assert "Invalid SMILES" in data["message"]
     assert data["data"] is None
     assert data["error"] is not None

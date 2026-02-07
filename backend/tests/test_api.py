@@ -42,5 +42,5 @@ def test_predict_invalid_smiles():
     # Let's check the content.
     data = response.json()
     assert data["status"] == 500
-    assert data["message"] == "Error loading the fingerprinting library!"
+    assert data["message"] == "Invalid SMILES string"
     assert data["error"] is not None
