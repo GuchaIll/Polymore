@@ -17,12 +17,17 @@ DATABASE_URL = os.getenv(
 )
 
 # Create SQLAlchemy engine
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,  # Enable connection health checks
-    pool_size=10,
-    max_overflow=20
-)
+# Use different settings for PostgreSQL vs SQLite (for testing)
+if DATABASE_URL.startswith("postgresql"):
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,  # Enable connection health checks
+        pool_size=10,
+        max_overflow=20
+    )
+else:
+    # SQLite or other databases - don't use pooling parameters
+    engine = create_engine(DATABASE_URL)
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

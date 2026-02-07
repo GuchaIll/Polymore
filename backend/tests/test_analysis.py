@@ -13,18 +13,18 @@ from fastapi.testclient import TestClient
 from main import app
 from features.advanced_analysis import analyze_molecule_high_compute
 
-client = TestClient(app)
+# Client is provided by conftest.py fixture
 
-def test_analyze_endpoint_submission():
+def test_analyze_endpoint_submission(client):
     """
-    Test that the analysis endpoint correctly submits a Celery task.
+    Test that the tier-2 analysis endpoint correctly submits a Celery task.
     """
-    mock_task = MagicMock()
-    mock_task.id = "test-task-id"
-    
-    # Patch the celery task in worker.py where it is imported/defined
-    with patch("worker.analyze_molecule_task.delay", return_value=mock_task) as mock_delay:
-        response = client.post("/api/analyze/high-compute", json={"smiles": "C"})
+    with patch("main.analyze_molecule_task.delay") as mock_delay:
+        mock_task = MagicMock()
+        mock_task.id = "test-task-id"
+        mock_delay.return_value = mock_task
+        
+        response = client.post("/predict/tier-2", json={"smiles": "C"})
         
         assert response.status_code == 202
         data = response.json()
