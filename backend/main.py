@@ -5,15 +5,39 @@ Inputs: SMILES strings, placed molecule data
 Outputs: Validation results, canonical SMILES, property predictions
 """
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional, Any, TypeVar, Generic, List, Dict
-from heuristics import predict_properties
+from typing import List, Dict, Any, Optional
+import os
+
 from rdkit import Chem
 from rdkit.Chem import Descriptors, rdMolDescriptors
+
 import logging
+
+from schemas.common import ResponseModel
+from schemas.molecule import (
+    SmiRequest,
+    SmilesValidationRequest,
+    SmilesValidationResponse,
+)
+from schemas.polymer import (
+    HeuristicPredictedProperties,
+    ValidatePolymerRequest,
+    ValidationResponse,
+    MoleculeData,
+)
+from core.exceptions import (
+    BaseAPIException,
+    BadRequestException,
+    NotFoundException,
+    ServerException,
+)
+from features.heuristics import predict_properties
+from features.advanced_analysis import analyze_molecule_high_compute
+from schemas.analysis import AnalysisRequest, AnalysisResponse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -34,78 +58,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-T = TypeVar('T')
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "status": 422,
+            "message": "Validation Error",
+            "data": None,
+            "error": str(exc.errors())
+        }
+    )
 
-class HeuristicPredictedProperties(BaseModel):
-    strength: float
-    flexibility: float
-    degradability: float
-    sustainability: float
-
-class ResponseModel(BaseModel, Generic[T]):
-    status: int
-    message: str
-    data: Optional[T] = None
-    error: Optional[str] = None
-
-class SmiRequest(BaseModel):
-    smiles: str
-
-
-# Models for polymer validation
-class Position(BaseModel):
-    """3D position in canvas space."""
-    x: float
-    y: float
-    z: float
-
-
-class MoleculeData(BaseModel):
-    """Data for a placed molecule from the frontend."""
-    id: int
-    smiles: str
-    name: str
-    position: Position
-    connections: List[int]
-
-
-class ValidatePolymerRequest(BaseModel):
-    """Request body for polymer validation endpoint."""
-    molecules: List[MoleculeData]
-    generatedSmiles: str
-
-
-class ValidationResponse(BaseModel):
-    """Response body for validation results."""
-    isValid: bool
-    canonicalSmiles: str
-    errors: List[str]
-    warnings: List[str]
-    polymerType: str
-    molecularWeight: Optional[float] = None
-    aromaticRings: Optional[int] = None
-
-
-class SmilesValidationRequest(BaseModel):
-    """Request for simple SMILES validation."""
-    smiles: str
-
-
-class SmilesValidationResponse(BaseModel):
-    """Response for SMILES validation."""
-    isValid: bool
-    canonicalSmiles: Optional[str] = None
-    error: Optional[str] = None
-    molecularWeight: Optional[float] = None
-    formula: Optional[str] = None
+@app.exception_handler(BaseAPIException)
+async def api_exception_handler(request: Request, exc: BaseAPIException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "status": exc.status_code,
+            "message": exc.detail,
+            "data": None,
+            "error": exc.detail
+        }
+    )
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unexpected error: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={
             "status": 500,
-            "message": "Error loading the fingerprinting library!",
+            "message": "Internal Server Error",
             "data": None,
             "error": str(exc)
         }
@@ -113,7 +97,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc: Exception):
-    return JSONResponse(
+     return JSONResponse(
         status_code=404,
         content={
             "status": 404,
@@ -134,34 +118,47 @@ def read_health():
 @app.post("/api/predict", response_model=ResponseModel[HeuristicPredictedProperties])
 def predict_heuristics(request: SmiRequest):
     """Predict polymer properties from SMILES using heuristics."""
-    properties = predict_properties(request.smiles)
-    return ResponseModel(
-        status=200,
-        message="Heuristic conversion successful",
-        data=HeuristicPredictedProperties(**properties)
-    )
+    try:
+        properties = predict_properties(request.smiles)
+        return ResponseModel(
+            status=200,
+            message="Heuristic conversion successful",
+            data=HeuristicPredictedProperties(**properties)
+        )
+    except Exception as e:
+        logger.error(f"Prediction failed for SMILES {request.smiles}: {e}")
+        raise ServerException(detail=str(e))
 
+@app.post("/api/analyze/high-compute", response_model=ResponseModel[AnalysisResponse])
+def analyze_high_compute(request: AnalysisRequest):
+    """
+    Perform high-compute analysis on a molecule using GFN2-xTB.
+    """
+    try:
+        results = analyze_molecule_high_compute(request.smiles)
+        return ResponseModel(
+            status=200,
+            message="Analysis successful",
+            data=AnalysisResponse(**results)
+        )
+    except ImportError as e:
+        raise ServerException(detail="High-compute analysis unavailable: " + str(e))
+    except ValueError as e:
+        raise BadRequestException(detail=str(e))
+    except Exception as e:
+        logger.error(f"High-compute analysis failed: {e}")
+        raise ServerException(detail=str(e))
 
 @app.post("/api/validate-smiles", response_model=ResponseModel[SmilesValidationResponse])
 def validate_smiles(request: SmilesValidationRequest):
     """
     Validate a single SMILES string using RDKit.
-    
-    Checks if the SMILES can be parsed and returns canonical form
-    along with basic molecular properties.
-    
-    Args:
-        request: SmilesValidationRequest with SMILES string
-        
-    Returns:
-        ResponseModel[SmilesValidationResponse] with validation result
     """
     mol = Chem.MolFromSmiles(request.smiles)
     
     if mol is None:
         return ResponseModel(
-            status=200, # or 400? Keeping 200 as per requested format for "successful return with data" even if isValid is False? 
-            # Actually, if it's a validation Check, returning 200 with isValid=False is standard.
+            status=200, 
             message="Validation completed",
             data=SmilesValidationResponse(
                 isValid=False,
@@ -187,21 +184,10 @@ def validate_smiles(request: SmilesValidationRequest):
         )
     )
 
-
 @app.post("/api/validate-polymer", response_model=ResponseModel[ValidationResponse])
 def validate_polymer(request: ValidatePolymerRequest):
     """
     Validate a polymer configuration from placed molecules.
-    
-    Uses RDKit to validate individual SMILES, check connectivity,
-    and generate canonical combined SMILES. Implements validation
-    rules based on RDKit aromaticity and bond order checking.
-    
-    Args:
-        request: ValidatePolymerRequest with molecules and generated SMILES
-        
-    Returns:
-        ResponseModel[ValidationResponse] with comprehensive validation results
     """
     errors: List[str] = []
     warnings: List[str] = []
@@ -314,12 +300,6 @@ def validate_polymer(request: ValidatePolymerRequest):
 def _classify_polymer_type(molecules: List[MoleculeData]) -> str:
     """
     Classify polymer type based on connectivity graph.
-    
-    Args:
-        molecules: List of molecule data with connections
-        
-    Returns:
-        Polymer type string: 'linear', 'branched', 'cyclic', or 'unknown'
     """
     if not molecules:
         return "unknown"
@@ -369,13 +349,6 @@ def _check_aromaticity(
 ) -> None:
     """
     Check aromaticity consistency across connected molecules.
-    
-    Based on RDKit aromaticity rules - aromatic bonds must be between
-    aromatic atoms, uses 4N+2 rule for ring systems.
-    
-    Args:
-        validated_mols: Dictionary of validated molecules
-        warnings: List to append warnings to
     """
     for mol_id, mol_info in validated_mols.items():
         rdkit_mol = mol_info["mol"]
@@ -405,29 +378,11 @@ def _check_aromaticity(
 def generate_polymer_smiles(request: ValidatePolymerRequest):
     """
     Generate polymer SMILES (pSMILES) notation from placed molecules.
-    
-    Creates a SMILES string with star atoms [*] marking connection points
-    for polymer repeating units, following CXSMILES conventions.
-    
-    Args:
-        request: ValidatePolymerRequest with molecules
-        
-    Returns:
-        ResponseModel[dict] with pSMILES and standard SMILES
     """
-    # First validate normally
-    # We can't call the endpoint function directly if we want the data easily,
-    # but let's reuse the logic or call helper.
-    # Refactoring validate_polymer to return the object would be cleaner,
-    # but for now let's just use the logic inside validate_polymer by refactoring it?
-    # Or just copy paste/call logic. To avoid complex refactor, I will just replicate the validation logic or better:
-    # Actually, validate_polymer returns ResponseModel now.
-    
     validation_response_model = validate_polymer(request)
     validation = validation_response_model.data
     
     if not validation.isValid:
-         # Propagate errors
         return ResponseModel(
             status=400,
             message="Validation failed",
