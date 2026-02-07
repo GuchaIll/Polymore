@@ -41,7 +41,7 @@ export interface MLPredictedProperties {
 
 export type PredictedProperties = HeuristicPredictedProperties & Partial<MLPredictedProperties>;
 
-export type ToolType = 'select' | 'add' | 'remove' | 'connect';
+export type ToolType = 'select' | 'add' | 'remove' | 'connect' | 'move';
 export type ViewMode = 'both' | 'structure' | 'volume';
 
     export interface PolyForgeState {
@@ -67,3 +67,4 @@ export type ViewMode = 'both' | 'structure' | 'volume';
         functional: Molecule[];
         monomers: Molecule[];
     }
+
