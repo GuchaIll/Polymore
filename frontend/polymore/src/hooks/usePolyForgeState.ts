@@ -6,6 +6,7 @@ import {
   OptimizationSuggestion
 } from '../util/optimization';
 import { PolymerValidationResult } from '../util';
+import { useTierOneAnalysis } from './useTierOneAnalysis';
 
 
 // Grid boundary constants (grid is 20x20 centered at origin)
@@ -28,6 +29,7 @@ const initialState: PolyForgeState = {
 export function usePolyForgeState() {
   const [state, setState] = useState<PolyForgeState>(initialState);
   const [toast, setToast] = useState<Toast>({ message: '', visible: false });
+  const { analyze: analyzeTierOne, loading: tierOneLoading } = useTierOneAnalysis();
 
   const showToast = useCallback((message: string) => {
     setToast({ message, visible: true });
@@ -424,71 +426,36 @@ export function usePolyForgeState() {
     const smiles = state.placedMolecules.map(m => m.smiles).join('.');
     showToast('Predicting properties...');
 
-    //Deprecated
-    // Helper function to generate random properties based on molecule composition
-    const generateRandomProperties = (): PredictedProperties => {
-    //   // Use molecule data to influence the random values for more realistic simulation
-    //   const totalWeight = state.placedMolecules.reduce((sum, m) => sum + m.weight, 0);
-    //   const moleculeCount = state.placedMolecules.length;
-    //   const bondCount = state.placedMolecules.reduce((sum, m) => sum + m.connections.length, 0) / 2;
-
-    //   // Base values influenced by structure
-    //   const weightFactor = Math.min(totalWeight / 500, 1); // Normalize weight influence
-    //   const bondFactor = bondCount > 0 ? Math.min(bondCount / moleculeCount, 1) : 0;
-
-    //   // Generate properties with some randomness but influenced by structure
-    //   const strength = Math.min(100, Math.max(10,
-    //     30 + (weightFactor * 40) + (bondFactor * 20) + (Math.random() * 20 - 10)
-    //   ));
-
-    //   const flexibility = Math.min(100, Math.max(10,
-    //     50 - (bondFactor * 30) + (Math.random() * 30 - 15)
-    //   ));
-
-    //   const degradability = Math.min(100, Math.max(10,
-    //     60 - (weightFactor * 30) + (Math.random() * 30 - 15)
-    //   ));
-
-    //   const sustainability = Math.min(100, Math.max(10,
-    //     40 + (degradability * 0.3) + (Math.random() * 20 - 10)
-    //   ));
-
-      return {
-        strength: Math.round(0 * 10) / 10,
-        flexibility: Math.round(0 * 10) / 10,
-        degradability: Math.round(0 * 10) / 10,
-        sustainability: Math.round(0 * 10) / 10
-      };
-    };
-
     try {
-      // Try to call backend API first
-      const response = await fetch('http://localhost:5000/api/predict', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ smiles })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
+      // Call backend API via useTierOneAnalysis hook
+      const result = await analyzeTierOne(smiles);
+      
+      if (result) {
+        // Normalize values: if > 1 use as-is, otherwise multiply by 100
+        const normalize = (val: number | undefined) => {
+          if (val === undefined || val === null) return 0;
+          return val > 1 ? val : val * 100;
+        };
+        
+        const properties: PredictedProperties = {
+          strength: Math.round(normalize(result.strength) * 10) / 10,
+          flexibility: Math.round(normalize(result.flexibility) * 10) / 10,
+          degradability: Math.round(normalize(result.degradability) * 10) / 10,
+          sustainability: Math.round(normalize(result.sustainability) * 10) / 10
+        };
+        
         showToast('Properties predicted!');
-        return data.properties;
+        return properties;
       } else {
-        throw new Error(data.error);
+        showToast('No prediction data returned');
+        return null;
       }
-    } catch (error) {
-      // Fallback to random generation if backend is not available
-      console.log('Backend not available, using simulated properties');
-
-      // Simulate a small delay like a real API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const properties = generateRandomProperties();
-      showToast('Properties predicted! (simulated)');
-      return properties;
+    } catch (error: any) {
+      console.error('Prediction error:', error);
+      showToast(error.message || 'Prediction failed');
+      return null;
     }
-  }, [state.placedMolecules, showToast]);
+  }, [state.placedMolecules, showToast, analyzeTierOne]);
 
   return {
     state,
