@@ -24,7 +24,7 @@ jobs:
       - name: Build Frontend Image
         uses: docker/build-push-action@v4
         with:
-          context: ./frontend
+          context: ./frontend/polymore
           push: false 
           tags: frontend-test:latest
 
