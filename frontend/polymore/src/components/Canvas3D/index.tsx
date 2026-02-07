@@ -220,6 +220,7 @@ interface Canvas3DProps {
   connectStart: number | null;
   draggedMolecule: Molecule | null;
   toast: Toast;
+  isDark: boolean;
   onMoleculeClick: (id: number) => void;
   onPlaneClick: (intersection: THREE.Vector3) => void;
   onDrop: (molecule: Molecule, position: { x: number; y: number; z: number }) => void;
@@ -235,6 +236,7 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
   connectStart,
   draggedMolecule,
   toast,
+  isDark,
   onMoleculeClick,
   onPlaneClick,
   onDrop,
@@ -309,7 +311,10 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
       <div className="w-full h-full">
         <Canvas
           camera={{ position: [15, 15, 15], fov: 60 }}
-          style={{ background: '#0a0a1a' }}
+          style={{ 
+            background: isDark ? '#0a0a1a' : '#f8fafb',
+            transition: 'background 0.3s ease-in-out'
+          }}
         >
           <SceneContent
             molecules={molecules}
@@ -326,9 +331,11 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
 
       {/* Grid Overlay */}
       <div
-        className="absolute inset-0 pointer-events-none opacity-50"
+        className="absolute inset-0 pointer-events-none opacity-50 transition-opacity duration-300"
         style={{
-          backgroundImage: 'linear-gradient(rgba(102, 126, 234, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(102, 126, 234, 0.1) 1px, transparent 1px)',
+          backgroundImage: isDark 
+            ? 'linear-gradient(rgba(102, 126, 234, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(102, 126, 234, 0.1) 1px, transparent 1px)'
+            : 'linear-gradient(rgba(16, 185, 129, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(16, 185, 129, 0.1) 1px, transparent 1px)',
           backgroundSize: '50px 50px'
         }}
       />
@@ -336,7 +343,7 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
       {/* Drop Indicator */}
       {dropIndicator.visible && (
         <div
-          className="absolute w-[60px] h-[60px] border-[3px] border-dashed border-poly-accent rounded-full pointer-events-none animate-pulse"
+          className="absolute w-[60px] h-[60px] border-[3px] border-dashed border-poly-light-accent dark:border-poly-accent rounded-full pointer-events-none animate-pulse"
           style={{
             left: dropIndicator.x,
             top: dropIndicator.y,
@@ -351,10 +358,10 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
           <button
             key={mode}
             className={`
-              w-10 h-10 border-2 rounded-lg text-white cursor-pointer text-lg transition-all
+              w-10 h-10 border-2 rounded-lg cursor-pointer text-lg transition-all
               ${viewMode === mode
-                ? 'border-poly-danger bg-poly-danger'
-                : 'border-poly-border bg-poly-sidebar/90 hover:border-poly-accent hover:bg-poly-border'
+                ? 'border-poly-light-accent dark:border-poly-danger bg-poly-light-accent dark:bg-poly-danger text-white'
+                : 'border-poly-light-border dark:border-poly-border bg-poly-light-sidebar/90 dark:bg-poly-sidebar/90 text-poly-light-text dark:text-white hover:border-poly-light-accent dark:hover:border-poly-accent hover:bg-poly-light-border dark:hover:bg-poly-border'
               }
             `}
             onClick={() => onViewModeChange(mode)}
@@ -364,7 +371,7 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
           </button>
         ))}
         <button
-          className="w-10 h-10 border-2 border-poly-border rounded-lg bg-poly-sidebar/90 text-white cursor-pointer text-lg transition-all hover:border-poly-accent hover:bg-poly-border"
+          className="w-10 h-10 border-2 border-poly-light-border dark:border-poly-border rounded-lg bg-poly-light-sidebar/90 dark:bg-poly-sidebar/90 text-poly-light-text dark:text-white cursor-pointer text-lg transition-all hover:border-poly-light-accent dark:hover:border-poly-accent hover:bg-poly-light-border dark:hover:bg-poly-border"
           onClick={onResetCamera}
           title="Reset View"
         >
@@ -375,7 +382,7 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
       {/* Toast */}
       <div
         className={`
-          absolute top-5 left-1/2 -translate-x-1/2 bg-poly-accent/95 text-white
+          absolute top-5 left-1/2 -translate-x-1/2 bg-poly-light-accent/95 dark:bg-poly-accent/95 text-white
           py-2.5 px-5 rounded-lg text-sm pointer-events-none z-50 transition-opacity
           ${toast.visible ? 'opacity-100' : 'opacity-0'}
         `}
