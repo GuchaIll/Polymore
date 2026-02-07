@@ -7,6 +7,7 @@ Outputs: Validation results, canonical SMILES, property predictions
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any, Optional
 import os
@@ -54,6 +55,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "status": 422,
+            "message": "Validation Error",
+            "data": None,
+            "error": str(exc.errors())
+        }
+    )
 
 @app.exception_handler(BaseAPIException)
 async def api_exception_handler(request: Request, exc: BaseAPIException):
