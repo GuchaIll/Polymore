@@ -29,6 +29,11 @@ services:
       - POSTGRES_DB=polymore_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d polymore_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # FastAPI Backend
   backend:
@@ -37,8 +42,10 @@ services:
     expose:
       - "8000"
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
     env_file:
       - ./backend/.env
     environment:
@@ -61,9 +68,12 @@ services:
     restart: always
     command: celery -A worker.celery_app worker --loglevel=info
     depends_on:
-      - redis
-      - postgres
-      - backend
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_started
     env_file:
       - ./backend/.env
     environment:
