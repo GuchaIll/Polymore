@@ -6,6 +6,18 @@ export interface Molecule {
     icon: string;
     color: string;
     weight: number;
+    // Extended fields for detailed molecule information
+    description?: string;
+    sustainabilityImpact?: string;
+    commonItems?: string[];
+    resultingPolymer?: string;
+    polymerizationType?: 'Addition' | 'Condensation' | 'Ring-opening';
+    linkageType?: string;
+    mechanicalEffect?: string;
+    biologicalRole?: string;
+    reactsWith?: string;
+    bondFormed?: string;
+    category?: 'basic' | 'functional' | 'thermoplastic' | 'biodegradable' | 'biofunctional' | 'conjugation';
 }
 
 export interface PlacedMolecule extends Molecule {
@@ -52,6 +64,7 @@ export type ViewMode = 'both' | 'structure' | 'volume';
         selectedMolecule: Molecule | null;
         selectedObject: number | null; // ID of selected molecule or connection
         connectStart: number | null; // ID of first molecule in connection
+        movingMoleculeId: number | null; // ID of molecule being moved
         history: PlacedMolecule[][];
         historyIndex: number;
         viewMode: ViewMode;
@@ -66,5 +79,9 @@ export type ViewMode = 'both' | 'structure' | 'volume';
         basic: Molecule[];
         functional: Molecule[];
         monomers: Molecule[];
+        thermoplastics: Molecule[];
+        biodegradable: Molecule[];
+        biofunctional: Molecule[];
+        conjugationHandles: Molecule[];
     }
 

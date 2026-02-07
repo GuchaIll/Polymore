@@ -11,6 +11,7 @@ import { Molecule, PredictedProperties } from '../../types';
 import { 
   validatePolymerComprehensive,
   predictPropertiesFromBackend,
+  parseSmilestoMolecules,
   PolymerValidationResult
 } from '../../util';
 
@@ -34,11 +35,16 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
     setConnectStart,
     setSelectedObject,
     clearCanvas,
+    importMolecules,
     undoAction,
     redoAction,
     exportStructure,
     optimizeStructure,
-    predictProperties
+    predictProperties,
+    // Move tool functions
+    startMove,
+    updateMovePosition,
+    confirmMove
   } = usePolyForgeState();
 
   const [draggedMolecule, setDraggedMolecule] = useState<Molecule | null>(null);
@@ -62,6 +68,13 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
   }, [placeMolecule]);
 
   const handlePlaneClick = useCallback((intersection: THREE.Vector3) => {
+    // If we're in move mode and have a molecule selected, confirm the move
+    if (state.movingMoleculeId !== null) {
+      confirmMove();
+      return;
+    }
+    
+    // Otherwise, place a new molecule in add mode
     if (state.tool === 'add' && state.selectedMolecule) {
       placeMolecule(state.selectedMolecule, {
         x: intersection.x,
@@ -69,7 +82,18 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
         z: intersection.z
       });
     }
-  }, [state.tool, state.selectedMolecule, placeMolecule]);
+  }, [state.tool, state.selectedMolecule, state.movingMoleculeId, placeMolecule, confirmMove]);
+
+  // Handle pointer movement for move tool preview
+  const handlePointerMove = useCallback((intersection: THREE.Vector3) => {
+    if (state.movingMoleculeId !== null) {
+      updateMovePosition({
+        x: intersection.x,
+        y: 0,
+        z: intersection.z
+      });
+    }
+  }, [state.movingMoleculeId, updateMovePosition]);
 
   const handleMoleculeClick = useCallback((id: number) => {
     switch (state.tool) {
@@ -86,8 +110,21 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
           connectMolecules(state.connectStart, id);
         }
         break;
+      case 'move':
+        // If not currently moving, start moving this molecule
+        if (state.movingMoleculeId === null) {
+          startMove(id);
+        } else if (state.movingMoleculeId === id) {
+          // Clicking the same molecule confirms its placement
+          confirmMove();
+        } else {
+          // Clicking a different molecule switches to moving that one instead
+          confirmMove();
+          startMove(id);
+        }
+        break;
     }
-  }, [state.tool, state.connectStart, setSelectedObject, removeMolecule, setConnectStart, connectMolecules]);
+  }, [state.tool, state.connectStart, state.movingMoleculeId, setSelectedObject, removeMolecule, setConnectStart, connectMolecules, startMove, confirmMove]);
 
   // Validate polymer configuration using comprehensive RDKit.js validation
   const handleValidate = useCallback(async () => {
@@ -179,6 +216,29 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
     }
   }, [rdkitReady, state.placedMolecules, predictProperties, showToast]);
 
+  const handleImportSmiles = useCallback(async (smiles: string) => {
+    if (!rdkitReady) {
+      showToast('Chemistry engine loading...');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await parseSmilestoMolecules(smiles);
+      
+      if (result.success && result.molecules.length > 0) {
+        importMolecules(result.molecules);
+        showToast(`Imported ${result.atomCount} atoms with ${result.bondCount} bonds`);
+      } else {
+        showToast(result.error || 'Failed to parse SMILES');
+      }
+    } catch (error) {
+      showToast(`Import error: ${error}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [rdkitReady, importMolecules, showToast]);
+
   const handleClear = useCallback(() => {
     if (state.placedMolecules.length === 0) return;
     if (window.confirm('Clear all molecules?')) {
@@ -217,6 +277,8 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
         onMoleculeSelect={setSelectedMolecule}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
+        onImportSmiles={handleImportSmiles}
+        rdkitReady={rdkitReady}
       />
 
       <div className="flex-1 flex flex-col relative">
@@ -241,11 +303,13 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
           tool={state.tool}
           selectedObject={state.selectedObject}
           connectStart={state.connectStart}
+          movingMoleculeId={state.movingMoleculeId}
           draggedMolecule={draggedMolecule}
           toast={toast}
           isDark={isDark}
           onMoleculeClick={handleMoleculeClick}
           onPlaneClick={handlePlaneClick}
+          onPointerMove={handlePointerMove}
           onDrop={handleDrop}
           onViewModeChange={setViewMode}
           onResetCamera={handleResetCamera}

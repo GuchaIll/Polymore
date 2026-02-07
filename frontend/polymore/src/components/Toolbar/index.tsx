@@ -81,6 +81,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
         </button>
       </div>
 
+      <div className="w-px h-[30px] bg-poly-light-border dark:bg-poly-border" />
+
       {/* Theme Toggle Switch */}
       <div className="ml-auto flex items-center gap-3">
         <Sun className="w-5 h-5 text-yellow-500" />

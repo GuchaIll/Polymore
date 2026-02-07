@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { BarChart3, Leaf } from 'lucide-react';
 import { PlacedMolecule, HeuristicPredictedProperties } from '../../types';
 import { PolymerValidationResult } from '../../util';

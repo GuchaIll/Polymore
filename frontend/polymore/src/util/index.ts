@@ -1221,3 +1221,187 @@ export const formatValidationErrors = (errors: ValidationError[]): string[] => {
 export const getErrorSuggestion = (code: ValidationRuleCode): string => {
     return ValidationRuleMessages[code]?.suggestion || "Check your molecular structure.";
 };
+
+// =============================================================================
+// SMILES TO MOLECULES PARSER
+// =============================================================================
+
+// Element color mapping for visualization
+const ELEMENT_COLORS: Record<string, string> = {
+    C: '#404040',   // Carbon - dark gray
+    H: '#FFFFFF',   // Hydrogen - white
+    O: '#FF0000',   // Oxygen - red
+    N: '#0000FF',   // Nitrogen - blue
+    S: '#FFFF00',   // Sulfur - yellow
+    P: '#FFA500',   // Phosphorus - orange
+    F: '#90E050',   // Fluorine - light green
+    Cl: '#1FF01F',  // Chlorine - green
+    Br: '#A52A2A',  // Bromine - brown
+    I: '#940094',   // Iodine - purple
+    Si: '#F0C8A0',  // Silicon - tan
+    default: '#FF69B4' // Unknown - pink
+};
+
+// Element atomic weights
+const ELEMENT_WEIGHTS: Record<string, number> = {
+    C: 12.011, H: 1.008, O: 15.999, N: 14.007, S: 32.065,
+    P: 30.974, F: 18.998, Cl: 35.453, Br: 79.904, I: 126.904,
+    Si: 28.086
+};
+
+/**
+ * Result of parsing SMILES into molecule structures
+ */
+export interface ParsedSmilesResult {
+    success: boolean;
+    molecules: PlacedMolecule[];
+    error?: string;
+    atomCount?: number;
+    bondCount?: number;
+}
+
+/**
+ * Parse a SMILES string into PlacedMolecule structures
+ * Uses RDKit to extract atom and bond information
+ * Generates 2D coordinates for visualization
+ * 
+ * @param smiles - SMILES string to parse
+ * @param startId - Starting ID for molecules (default: 1)
+ * @param centerOffset - Position offset for the structure center
+ * @returns ParsedSmilesResult with array of PlacedMolecule objects
+ */
+export const parseSmilestoMolecules = async (
+    smiles: string,
+    startId: number = 1,
+    centerOffset: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 }
+): Promise<ParsedSmilesResult> => {
+    try {
+        const rdkit = await getRDKit();
+        const mol = rdkit.get_mol(smiles);
+        
+        if (!mol) {
+            return {
+                success: false,
+                molecules: [],
+                error: 'Invalid SMILES: Could not parse molecule'
+            };
+        }
+        
+        try {
+            // Get Molblock which contains 2D coordinates
+            const molblock = mol.get_molblock();
+            const lines = molblock.split('\n');
+            
+            // Parse counts line (4th line in Molfile V2000)
+            // Format: aaabbblllfffcccsssxxxrrrpppiiimmmvvvvvv
+            // aaa = number of atoms, bbb = number of bonds
+            const countsLine = lines[3];
+            const numAtoms = parseInt(countsLine.substring(0, 3).trim());
+            const numBonds = parseInt(countsLine.substring(3, 6).trim());
+            
+            if (numAtoms === 0) {
+                return {
+                    success: false,
+                    molecules: [],
+                    error: 'No atoms found in molecule'
+                };
+            }
+            
+            // Scale factor for coordinates
+            const scale = 2.5;
+            
+            // Parse atom block (starts at line 5, 0-indexed line 4)
+            const atoms: Array<{ x: number; y: number; z: number; symbol: string }> = [];
+            for (let i = 0; i < numAtoms; i++) {
+                const atomLine = lines[4 + i];
+                // V2000 format: xxxxx.xxxxyyyyy.yyyyzzzzz.zzzz aaa
+                const x = parseFloat(atomLine.substring(0, 10).trim());
+                const y = parseFloat(atomLine.substring(10, 20).trim());
+                const z = parseFloat(atomLine.substring(20, 30).trim());
+                const symbol = atomLine.substring(31, 34).trim();
+                atoms.push({ x, y, z, symbol });
+            }
+            
+            // Calculate center of mass for centering
+            let sumX = 0, sumY = 0;
+            for (const atom of atoms) {
+                sumX += atom.x;
+                sumY += atom.y;
+            }
+            const centerX = sumX / atoms.length;
+            const centerY = sumY / atoms.length;
+            
+            // Create PlacedMolecule for each atom
+            const molecules: PlacedMolecule[] = [];
+            const atomIdMap = new Map<number, number>();
+            
+            for (let i = 0; i < atoms.length; i++) {
+                const atom = atoms[i];
+                const element = atom.symbol || 'C';
+                const moleculeId = startId + i;
+                atomIdMap.set(i, moleculeId);
+                
+                // Center and scale coordinates, project onto XZ plane (Y=0 for ground)
+                const posX = (atom.x - centerX) * scale + centerOffset.x;
+                const posZ = (atom.y - centerY) * scale + centerOffset.z;
+                const posY = centerOffset.y;
+                
+                molecules.push({
+                    id: moleculeId,
+                    name: element,
+                    formula: element,
+                    smiles: `[${element}]`,
+                    icon: element.charAt(0),
+                    color: ELEMENT_COLORS[element] || ELEMENT_COLORS.default,
+                    weight: ELEMENT_WEIGHTS[element] || 12,
+                    position: { x: posX, y: posY, z: posZ },
+                    connections: []
+                });
+            }
+            
+            // Parse bond block
+            let bondCount = 0;
+            for (let i = 0; i < numBonds; i++) {
+                const bondLine = lines[4 + numAtoms + i];
+                // V2000 format: 111222tttsssxxxrrrccc
+                // 111 = first atom, 222 = second atom, ttt = bond type
+                const atom1Idx = parseInt(bondLine.substring(0, 3).trim()) - 1; // 1-indexed to 0-indexed
+                const atom2Idx = parseInt(bondLine.substring(3, 6).trim()) - 1;
+                
+                const mol1Id = atomIdMap.get(atom1Idx);
+                const mol2Id = atomIdMap.get(atom2Idx);
+                
+                if (mol1Id !== undefined && mol2Id !== undefined) {
+                    const mol1 = molecules.find(m => m.id === mol1Id);
+                    const mol2 = molecules.find(m => m.id === mol2Id);
+                    
+                    if (mol1 && mol2) {
+                        if (!mol1.connections.includes(mol2Id)) {
+                            mol1.connections.push(mol2Id);
+                        }
+                        if (!mol2.connections.includes(mol1Id)) {
+                            mol2.connections.push(mol1Id);
+                        }
+                        bondCount++;
+                    }
+                }
+            }
+            
+            return {
+                success: true,
+                molecules,
+                atomCount: numAtoms,
+                bondCount
+            };
+            
+        } finally {
+            mol.delete();
+        }
+    } catch (error) {
+        return {
+            success: false,
+            molecules: [],
+            error: `Failed to parse SMILES: ${error}`
+        };
+    }
+};

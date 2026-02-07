@@ -2,6 +2,9 @@ import {useState, useCallback} from 'react';
 import { PolyForgeState, Molecule, PlacedMolecule, Position, Toast, ToolType, ViewMode, PredictedProperties } from '../types';
 
 
+// Grid boundary constants (grid is 20x20 centered at origin)
+const GRID_HALF_SIZE = 10;
+
 const initialState: PolyForgeState = {
   tool: 'select',
   gridSnap: true,
@@ -10,6 +13,7 @@ const initialState: PolyForgeState = {
   selectedMolecule: null,
   selectedObject: null,
   connectStart: null,
+  movingMoleculeId: null,
   history: [],
   historyIndex: -1,
   viewMode: 'both'
@@ -25,16 +29,70 @@ export function usePolyForgeState() {
   }, []);
 
   const setTool = useCallback((tool: ToolType) => {
-    setState(prev => ({ ...prev, tool, connectStart: null }));
+    setState(prev => ({ ...prev, tool, connectStart: null, movingMoleculeId: null }));
     const toolNames: Record<ToolType, string> = {
       select: 'Select tool - Click to select molecules',
       add: 'Add tool - Click to place selected molecule',
       remove: 'Remove tool - Click molecules to delete',
       connect: 'Bond tool - Click two molecules to connect',
-      move: 'Move tool - Drag molecules to reposition'
+      move: 'Move tool - Click molecule to move, click again to place'
     };
     showToast(toolNames[tool]);
   }, [showToast]);
+
+  // Check if position is within grid boundaries
+  const isWithinGrid = useCallback((position: Position): boolean => {
+    return Math.abs(position.x) <= GRID_HALF_SIZE && Math.abs(position.z) <= GRID_HALF_SIZE;
+  }, []);
+
+  // Clamp position to grid boundaries
+  const clampToGrid = useCallback((position: Position): Position => {
+    return {
+      x: Math.max(-GRID_HALF_SIZE, Math.min(GRID_HALF_SIZE, position.x)),
+      y: position.y,
+      z: Math.max(-GRID_HALF_SIZE, Math.min(GRID_HALF_SIZE, position.z))
+    };
+  }, []);
+
+  // Start moving a molecule
+  const startMove = useCallback((id: number) => {
+    const mol = state.placedMolecules.find(m => m.id === id);
+    if (mol) {
+      setState(prev => ({ ...prev, movingMoleculeId: id }));
+      showToast(`Moving ${mol.name} - click to place`);
+    }
+  }, [state.placedMolecules, showToast]);
+
+  // Cancel move operation
+  const cancelMove = useCallback(() => {
+    setState(prev => ({ ...prev, movingMoleculeId: null }));
+  }, []);
+
+  // Move molecule to new position (live preview during mouse move)
+  const updateMovePosition = useCallback((position: Position) => {
+    setState(prev => {
+      if (!prev.movingMoleculeId) return prev;
+
+      const clampedPosition = clampToGrid(position);
+      const snappedPosition: Position = prev.gridSnap
+        ? {
+            x: Math.round(clampedPosition.x / prev.gridSize) * prev.gridSize,
+            y: 0,
+            z: Math.round(clampedPosition.z / prev.gridSize) * prev.gridSize
+          }
+        : { ...clampedPosition, y: 0 };
+
+      const newMolecules = prev.placedMolecules.map(m =>
+        m.id === prev.movingMoleculeId
+          ? { ...m, position: snappedPosition }
+          : m
+      );
+
+      return { ...prev, placedMolecules: newMolecules };
+    });
+  }, [clampToGrid]);
+
+  // Note: confirmMove is defined after saveToHistory below
 
   const setSelectedMolecule = useCallback((molecule: Molecule) => {
     setState(prev => ({ ...prev, selectedMolecule: molecule, tool: 'add' }));
@@ -68,15 +126,34 @@ export function usePolyForgeState() {
     });
   }, []);
 
+  // Confirm molecule placement after move
+  const confirmMove = useCallback(() => {
+    setState(prev => {
+      if (!prev.movingMoleculeId) return prev;
+      
+      const mol = prev.placedMolecules.find(m => m.id === prev.movingMoleculeId);
+      if (mol) {
+        saveToHistory(prev.placedMolecules);
+        showToast(`Placed ${mol.name}`);
+      }
+      
+      return { ...prev, movingMoleculeId: null };
+    });
+  }, [saveToHistory, showToast]);
+
   const placeMolecule = useCallback((mol: Molecule, position: Position) => {
     setState(prev => {
+      // Clamp position to grid boundaries
+      const clampedX = Math.max(-GRID_HALF_SIZE, Math.min(GRID_HALF_SIZE, position.x));
+      const clampedZ = Math.max(-GRID_HALF_SIZE, Math.min(GRID_HALF_SIZE, position.z));
+      
       const snappedPosition: Position = prev.gridSnap
         ? {
-            x: Math.round(position.x / prev.gridSize) * prev.gridSize,
+            x: Math.round(clampedX / prev.gridSize) * prev.gridSize,
             y: 0,
-            z: Math.round(position.z / prev.gridSize) * prev.gridSize
+            z: Math.round(clampedZ / prev.gridSize) * prev.gridSize
           }
-        : { ...position, y: 0 };
+        : { x: clampedX, y: 0, z: clampedZ };
 
       const moleculeData: PlacedMolecule = {
         id: Date.now(),
@@ -167,6 +244,31 @@ export function usePolyForgeState() {
       return { ...prev, placedMolecules: [] };
     });
   }, [state.placedMolecules.length, saveToHistory, showToast]);
+
+  const importMolecules = useCallback((moleculesToImport: PlacedMolecule[]) => {
+    if (moleculesToImport.length === 0) return;
+
+    setState(prev => {
+      // Offset new molecules to avoid overlap with existing ones
+      const maxId = prev.placedMolecules.reduce((max, m) => Math.max(max, m.id), 0);
+      const offsetX = prev.placedMolecules.length > 0 ? 10 : 0;
+      
+      const newMolecules = moleculesToImport.map((mol, idx) => ({
+        ...mol,
+        id: maxId + mol.id + 1,
+        position: {
+          x: mol.position.x + offsetX,
+          y: mol.position.y,
+          z: mol.position.z
+        },
+        connections: mol.connections.map(connId => maxId + connId + 1)
+      }));
+      
+      const allMolecules = [...prev.placedMolecules, ...newMolecules];
+      saveToHistory(allMolecules);
+      return { ...prev, placedMolecules: allMolecules };
+    });
+  }, [saveToHistory]);
 
   const undoAction = useCallback(() => {
     setState(prev => {
@@ -307,10 +409,17 @@ export function usePolyForgeState() {
     setConnectStart,
     setSelectedObject,
     clearCanvas,
+    importMolecules,
     undoAction,
     redoAction,
     exportStructure,
     optimizeStructure,
-    predictProperties
+    predictProperties,
+    // Move tool functions
+    startMove,
+    cancelMove,
+    updateMovePosition,
+    confirmMove,
+    isWithinGrid
   };
 }

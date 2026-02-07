@@ -2,6 +2,7 @@ import React, { useRef, useState, useCallback, useMemo } from 'react';
 import { Canvas, useThree, ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import * as THREE from 'three';
+import { Boxes, CircleDot, Cloud, Crosshair } from 'lucide-react';
 import { PlacedMolecule, Molecule, ViewMode, ToolType, Toast } from '../../types';
 
 // Molecule 3D component
@@ -70,34 +71,49 @@ const Bond: React.FC<BondProps> = ({ start, end }) => {
   );
 };
 
-// Click handler
+// Click and move handler for placing molecules and moving
 interface ClickHandlerProps {
   onPlaneClick: (intersection: THREE.Vector3) => void;
+  onPointerMove: (intersection: THREE.Vector3) => void;
   tool: ToolType;
+  isMoving: boolean;
 }
 
-const ClickHandler: React.FC<ClickHandlerProps> = ({ onPlaneClick, tool }) => {
+const ClickHandler: React.FC<ClickHandlerProps> = ({ onPlaneClick, onPointerMove, tool, isMoving }) => {
   const { camera, raycaster, pointer } = useThree();
 
-  const handleClick = useCallback(() => {
-    if (tool !== 'add') return;
-
+  const getPlaneIntersection = useCallback(() => {
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const intersection = new THREE.Vector3();
-
     raycaster.setFromCamera(pointer, camera);
     raycaster.ray.intersectPlane(plane, intersection);
+    return intersection;
+  }, [camera, raycaster, pointer]);
 
+  const handleClick = useCallback(() => {
+    if (tool !== 'add' && !isMoving) return;
+
+    const intersection = getPlaneIntersection();
     if (intersection) {
       onPlaneClick(intersection);
     }
-  }, [camera, raycaster, pointer, onPlaneClick, tool]);
+  }, [tool, isMoving, getPlaneIntersection, onPlaneClick]);
+
+  const handlePointerMove = useCallback(() => {
+    if (!isMoving) return;
+
+    const intersection = getPlaneIntersection();
+    if (intersection) {
+      onPointerMove(intersection);
+    }
+  }, [isMoving, getPlaneIntersection, onPointerMove]);
 
   return (
     <mesh
       position={[0, -0.01, 0]}
       rotation={[-Math.PI / 2, 0, 0]}
       onClick={handleClick}
+      onPointerMove={handlePointerMove}
       visible={false}
     >
       <planeGeometry args={[100, 100]} />
@@ -113,8 +129,10 @@ interface SceneContentProps {
   tool: ToolType;
   selectedObject: number | null;
   connectStart: number | null;
+  movingMoleculeId: number | null;
   onMoleculeClick: (id: number) => void;
   onPlaneClick: (intersection: THREE.Vector3) => void;
+  onPointerMove: (intersection: THREE.Vector3) => void;
   onCameraReady: (camera: THREE.Camera) => void;
 }
 
@@ -135,8 +153,10 @@ const SceneContent: React.FC<SceneContentProps> = ({
   tool,
   selectedObject,
   connectStart,
+  movingMoleculeId,
   onMoleculeClick,
   onPlaneClick,
+  onPointerMove,
   onCameraReady
 }) => {
   const bonds = useMemo(() => {
@@ -181,14 +201,19 @@ const SceneContent: React.FC<SceneContentProps> = ({
         position={[0, -0.1, 0]}
       />
 
-      <ClickHandler onPlaneClick={onPlaneClick} tool={tool} />
+      <ClickHandler 
+        onPlaneClick={onPlaneClick} 
+        onPointerMove={onPointerMove}
+        tool={tool} 
+        isMoving={movingMoleculeId !== null}
+      />
 
       {showStructure && molecules.map(mol => (
         <Molecule3D
           key={mol.id}
           molecule={mol}
           isSelected={selectedObject === mol.id}
-          isHighlighted={connectStart === mol.id}
+          isHighlighted={connectStart === mol.id || movingMoleculeId === mol.id}
           onClick={(e) => {
             e.stopPropagation();
             onMoleculeClick(mol.id);
@@ -218,11 +243,13 @@ interface Canvas3DProps {
   tool: ToolType;
   selectedObject: number | null;
   connectStart: number | null;
+  movingMoleculeId: number | null;
   draggedMolecule: Molecule | null;
   toast: Toast;
   isDark: boolean;
   onMoleculeClick: (id: number) => void;
   onPlaneClick: (intersection: THREE.Vector3) => void;
+  onPointerMove: (intersection: THREE.Vector3) => void;
   onDrop: (molecule: Molecule, position: { x: number; y: number; z: number }) => void;
   onViewModeChange: (mode: ViewMode) => void;
   onResetCamera: () => void;
@@ -234,11 +261,13 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
   tool,
   selectedObject,
   connectStart,
+  movingMoleculeId,
   draggedMolecule,
   toast,
   isDark,
   onMoleculeClick,
   onPlaneClick,
+  onPointerMove,
   onDrop,
   onViewModeChange,
   onResetCamera
@@ -294,10 +323,10 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
     }
   }, [draggedMolecule, onDrop]);
 
-  const viewModes: { mode: ViewMode; icon: string; title: string }[] = [
-    { mode: 'both', icon: '🔮', title: 'Volume + Structure' },
-    { mode: 'structure', icon: '⚛️', title: 'Structure Only' },
-    { mode: 'volume', icon: '☁️', title: 'Volume Only' }
+  const viewModes: { mode: ViewMode; icon: React.ReactNode; title: string }[] = [
+    { mode: 'both', icon: <Boxes className="w-5 h-5" />, title: 'Volume + Structure' },
+    { mode: 'structure', icon: <CircleDot className="w-5 h-5" />, title: 'Structure Only' },
+    { mode: 'volume', icon: <Cloud className="w-5 h-5" />, title: 'Volume Only' }
   ];
 
   return (
@@ -322,8 +351,10 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
             tool={tool}
             selectedObject={selectedObject}
             connectStart={connectStart}
+            movingMoleculeId={movingMoleculeId}
             onMoleculeClick={onMoleculeClick}
             onPlaneClick={onPlaneClick}
+            onPointerMove={onPointerMove}
             onCameraReady={handleCameraReady}
           />
         </Canvas>
@@ -358,7 +389,8 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
           <button
             key={mode}
             className={`
-              w-10 h-10 border-2 rounded-lg cursor-pointer text-lg transition-all
+              w-10 h-10 border-2 rounded-lg cursor-pointer transition-all
+              flex items-center justify-center
               ${viewMode === mode
                 ? 'border-poly-light-accent dark:border-poly-danger bg-poly-light-accent dark:bg-poly-danger text-white'
                 : 'border-poly-light-border dark:border-poly-border bg-poly-light-sidebar/90 dark:bg-poly-sidebar/90 text-poly-light-text dark:text-white hover:border-poly-light-accent dark:hover:border-poly-accent hover:bg-poly-light-border dark:hover:bg-poly-border'
@@ -371,11 +403,11 @@ const Canvas3D: React.FC<Canvas3DProps> = ({
           </button>
         ))}
         <button
-          className="w-10 h-10 border-2 border-poly-light-border dark:border-poly-border rounded-lg bg-poly-light-sidebar/90 dark:bg-poly-sidebar/90 text-poly-light-text dark:text-white cursor-pointer text-lg transition-all hover:border-poly-light-accent dark:hover:border-poly-accent hover:bg-poly-light-border dark:hover:bg-poly-border"
+          className="w-10 h-10 border-2 border-poly-light-border dark:border-poly-border rounded-lg bg-poly-light-sidebar/90 dark:bg-poly-sidebar/90 text-poly-light-text dark:text-white cursor-pointer transition-all hover:border-poly-light-accent dark:hover:border-poly-accent hover:bg-poly-light-border dark:hover:bg-poly-border flex items-center justify-center"
           onClick={onResetCamera}
           title="Reset View"
         >
-          🎯
+          <Crosshair className="w-5 h-5" />
         </button>
       </div>
 
