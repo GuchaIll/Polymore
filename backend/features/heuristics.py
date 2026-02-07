@@ -1,6 +1,8 @@
-import math
+import logging
 from rdkit import Chem
 from rdkit.Chem import Descriptors, Lipinski, rdMolDescriptors, GraphDescriptors, Crippen
+
+logger = logging.getLogger(__name__)
 
 # --- KNOWLEDGE BASE ---
 RECYCLABLE_SMARTS = {
@@ -40,10 +42,15 @@ def predict_properties(smiles: str) -> dict:
     if not mol:
         raise ValueError("Invalid SMILES string")
 
+    logger.info(f"Starting Tier 1 analysis for SMILES: {smiles}")
+
     # Basic Descriptors
     mw = Descriptors.MolWt(mol)
     n_heavy = mol.GetNumHeavyAtoms()
+    logger.debug(f"Basic descriptors: MW={mw}, HeavyAtoms={n_heavy}")
+    
     if n_heavy == 0: 
+        logger.warning("Molecule has no heavy atoms, returning zero scores")
         return {
             "strength": 0.0, "flexibility": 0.0, 
             "degradability": 0.0, "sustainability": 0.0, 
@@ -51,13 +58,16 @@ def predict_properties(smiles: str) -> dict:
         }
 
     # --- 1. FLEXIBILITY (Rotatable Bond Density) ---
+    logger.debug("Calculating flexibility metrics...")
     # Logic: High density of rotatable bonds = Flexible/Soft.
     n_rot = Descriptors.NumRotatableBonds(mol)
     # Normalize: 0.0 (Rigid) to 0.5+ (Very Flexible)
     rot_density = n_rot / n_heavy
     flexibility = min(rot_density * 20.0, 10.0)
+    logger.debug(f"Flexibility score: {flexibility} (n_rot: {n_rot}, density: {rot_density})")
 
     # --- 2. STRENGTH (Rigidity & Cohesion) ---
+    logger.debug("Calculating strength metrics...")
     # Logic: Aromatic rings (stiffness) + TPSA (Polarity/H-bonding for cohesion)
     n_aromatic = len([a for a in mol.GetAtoms() if a.GetIsAromatic()])
     aromatic_fraction = n_aromatic / n_heavy
@@ -69,29 +79,36 @@ def predict_properties(smiles: str) -> dict:
     # Strength = 70% Rigidity + 30% Cohesion
     raw_strength = (aromatic_fraction * 7.0) + (cohesion_score * 3.0)
     strength = min(raw_strength * 2.0, 10.0)
+    logger.debug(f"Strength score: {strength} (aromatic_frac: {aromatic_fraction}, tpsa: {tpsa})")
 
     # --- 3. DEGRADABILITY (Recyclability Potential) ---
+    logger.debug("Calculating degradability metrics...")
     # Logic: Count "unzippable" bonds per unit of Molecular Weight.
     total_recyclable = 0
     breakdown_details = {}
     for name, pattern in RECYCLABLE_PATTERNS.items():
         if pattern:
-            count = len(mol.GetSubstructMatches(pattern))
+            matches = mol.GetSubstructMatches(pattern)
+            count = len(matches)
             if count > 0:
                 total_recyclable += count
                 breakdown_details[name] = count
+                logger.debug(f"Found {count} {name} groups")
     
     # Heuristic: 1 breakable bond per 150 MW is "Good" (Score ~5-6)
     density = (total_recyclable * 150.0) / (mw + 1.0)
     degradability = min(density * 5.0, 10.0)
+    logger.debug(f"Degradability score: {degradability} (total_recyclable: {total_recyclable}, density: {density})")
 
     # --- 4. SUSTAINABILITY (Eco-Composite) ---
+    logger.debug(f"Calculating sustainability metrics for {smiles}")
     # Logic: Bio-sourcing potential + Safety (Lack of toxicity) + Efficiency
     
     # A. Bio-Source Proxy (Fraction sp3 + Chirality)
     f_sp3 = rdMolDescriptors.CalcFractionCSP3(mol)
     n_chiral = len(Chem.FindMolChiralCenters(mol, includeUnassigned=True))
     bio_score = (f_sp3 * 0.8) + (min(n_chiral, 3) * 0.1)
+    logger.debug(f"Bio-source score: {bio_score} (f_sp3: {f_sp3}, chiral: {n_chiral})")
     
     # B. Toxicity Penalty
     alert_penalty = 0
@@ -100,6 +117,7 @@ def predict_properties(smiles: str) -> dict:
         if pattern and mol.HasSubstructMatch(pattern):
             alert_penalty += 4.0 # Heavy penalty per alert type
             found_alerts.append(name)
+    logger.debug(f"Toxicity penalty: {alert_penalty} (alerts: {found_alerts})")
             
     # C. SAS Score Proxy (Complexity)
     # Using BertzCT as a proxy for Synthetic Accessibility
@@ -110,13 +128,15 @@ def predict_properties(smiles: str) -> dict:
         sas_proxy = min(max(1.0, bertz / 100.0), 10.0)
     except:
         sas_proxy = 5.0  # Neutral default if calculation fails
+    logger.debug(f"SAS proxy score: {sas_proxy}")
     
     # Composite Sustainability Score
     # Start at 5.0, add Bio, subtract Tox and Complexity
     raw_sust = (5.0 + (bio_score * 4.0) - alert_penalty - (sas_proxy * 0.2))
     sustainability = max(0.0, min(raw_sust, 10.0))
+    logger.debug(f"Final sustainability score: {sustainability}")
 
-    return {
+    result = {
         "strength": round(strength, 2),
         "flexibility": round(flexibility, 2),
         "degradability": round(degradability, 2),
@@ -130,3 +150,5 @@ def predict_properties(smiles: str) -> dict:
             "molecular_weight": round(mw, 2)
         }
     }
+    logger.info(f"Tier 1 analysis complete for {smiles}: {result}")
+    return result
