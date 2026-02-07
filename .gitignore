@@ -222,3 +222,4 @@ venv.bak/
 # General
 .DS_Store
 Thumbs.db
+.md

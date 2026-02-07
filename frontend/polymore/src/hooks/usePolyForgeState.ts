@@ -30,7 +30,8 @@ export function usePolyForgeState() {
       select: 'Select tool - Click to select molecules',
       add: 'Add tool - Click to place selected molecule',
       remove: 'Remove tool - Click molecules to delete',
-      connect: 'Bond tool - Click two molecules to connect'
+      connect: 'Bond tool - Click two molecules to connect',
+      move: 'Move tool - Drag molecules to reposition'
     };
     showToast(toolNames[tool]);
   }, [showToast]);

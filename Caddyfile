@@ -1,0 +1,8 @@
+
+spotme.life {
+    reverse_proxy frontend:80
+}
+
+api.spotme.life {
+    reverse_proxy backend:8000
+}
