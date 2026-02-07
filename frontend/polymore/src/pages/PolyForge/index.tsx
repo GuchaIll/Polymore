@@ -75,6 +75,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
   const [isPaused, setIsPaused] = useState(false);
   const [currentSmiles, setCurrentSmiles] = useState('');
   const simulationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingQueueAddRef = useRef<Set<string>>(new Set());
 
   const handleDragStart = useCallback((molecule: Molecule) => {
     setDraggedMolecule(molecule);
@@ -319,6 +320,11 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
 
   // Add task to simulation queue (validates for duplicates)
   const handleAddToQueue = useCallback((smiles: string, name: string): boolean => {
+    // Check synchronously if already pending addition (prevents race condition)
+    if (pendingQueueAddRef.current.has(smiles)) {
+      return false;
+    }
+
     // Check if SMILES already in queue or running
     const allSmiles = [
       ...simulationQueue.map(t => t.smiles),
@@ -330,6 +336,9 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
       return false; // Duplicate
     }
 
+    // Mark as pending synchronously before async state update
+    pendingQueueAddRef.current.add(smiles);
+
     const newTask: SimulationTask = {
       id: `sim-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       smiles,
@@ -339,7 +348,11 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
       progress: 0
     };
 
-    setSimulationQueue(prev => [...prev, newTask]);
+    setSimulationQueue(prev => {
+      // Clear from pending ref once state is updated
+      pendingQueueAddRef.current.delete(smiles);
+      return [...prev, newTask];
+    });
     showToast('Added to simulation queue');
     return true;
   }, [simulationQueue, runningTask, completedTasks, showToast]);
@@ -390,7 +403,12 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
         const newProgress = Math.min(prev.progress + Math.random() * 15 + 5, 100);
         
         if (newProgress >= 100) {
-          // Task completed - generate mock results
+          // First transition to processing status
+          if (prev.status === 'running') {
+            return { ...prev, status: 'processing', progress: 100 };
+          }
+          
+          // Then complete with results (simulates API response)
           const completedTask: SimulationTask = {
             ...prev,
             status: 'completed',
@@ -491,35 +509,37 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
       />
 
       <div className="flex-1 flex flex-col relative">
-        <Toolbar
-          gridSnap={state.gridSnap}
-          isDark={isDark}
-          onClear={handleClear}
-          onUndo={undoAction}
-          onRedo={redoAction}
-          onToggleSnap={toggleSnap}
-          onOptimize={optimizeStructure}
-          onOptimizePositions={optimizePositions}
-          onOptimizeConnections={optimizeConnections}
-          onPredict={handlePredict}
-          onExport={exportStructure}
-          onExportJSON={exportAsJSON}
-          onExportSMILES={exportAsSMILES}
-          onToggleTheme={toggleTheme}
-          onValidate={handleValidate}
-          onSimulate={() => {
-            setSimulationPageOpen(prev => !prev);
-            setResultsPageOpen(false);
-          }}
-          rdkitReady={rdkitReady}
-          simulationQueueCount={simulationQueue.length + (runningTask ? 1 : 0)}
-          isSimulationView={simulationPageOpen}
-          onResults={() => {
-            setResultsPageOpen(prev => !prev);
-            setSimulationPageOpen(false);
-          }}
-          isResultsView={resultsPageOpen}
-        />
+        {!simulationPageOpen && !resultsPageOpen && (
+          <Toolbar
+            gridSnap={state.gridSnap}
+            isDark={isDark}
+            onClear={handleClear}
+            onUndo={undoAction}
+            onRedo={redoAction}
+            onToggleSnap={toggleSnap}
+            onOptimize={optimizeStructure}
+            onOptimizePositions={optimizePositions}
+            onOptimizeConnections={optimizeConnections}
+            onPredict={handlePredict}
+            onExport={exportStructure}
+            onExportJSON={exportAsJSON}
+            onExportSMILES={exportAsSMILES}
+            onToggleTheme={toggleTheme}
+            onValidate={handleValidate}
+            onSimulate={() => {
+              setSimulationPageOpen(prev => !prev);
+              setResultsPageOpen(false);
+            }}
+            rdkitReady={rdkitReady}
+            simulationQueueCount={simulationQueue.length + (runningTask ? 1 : 0)}
+            isSimulationView={simulationPageOpen}
+            onResults={() => {
+              setResultsPageOpen(prev => !prev);
+              setSimulationPageOpen(false);
+            }}
+            isResultsView={resultsPageOpen}
+          />
+        )}
 
         {/* Conditionally render Editor, Simulation, or Results Page */}
         {simulationPageOpen ? (
@@ -538,12 +558,14 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
             isPaused={isPaused}
             onTogglePause={handleTogglePause}
             onAutoQueueAttempted={(_success: boolean, message: string) => showToast(message)}
+            onClose={() => setSimulationPageOpen(false)}
           />
         ) : resultsPageOpen ? (
           <>
             {/* ResultsPage integration */}
             {/* TODO: Map predictedProperties and mock applications to ResultsPage props */}
             <ResultsPage
+              onClose={() => setResultsPageOpen(false)}
               properties={{
                 strength: predictedProperties?.strength ?? 80,
                 elasticity: 0,

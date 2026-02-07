@@ -87,7 +87,7 @@ export type ViewMode = 'both' | 'structure' | 'volume';
 
 
 // Simulation Queue Types
-export type SimulationStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type SimulationStatus = 'pending' | 'running' | 'processing' | 'completed' | 'failed';
 
 export interface SimulationTask {
     id: string;

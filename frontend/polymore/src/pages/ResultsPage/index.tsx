@@ -5,8 +5,10 @@
  */
 
 import React, { useEffect, useRef } from 'react';
+import { ArrowLeft } from 'lucide-react';
 
 interface ResultsPageProps {
+  onClose?: () => void;
   properties: {
     strength: number;
     elasticity: number;
@@ -111,7 +113,7 @@ const RadarChart: React.FC<{ properties: ResultsPageProps['properties'] }> = ({ 
   );
 };
 
-const ResultsPage: React.FC<ResultsPageProps> = ({ properties, applications }) => {
+const ResultsPage: React.FC<ResultsPageProps> = ({ onClose, properties, applications }) => {
   // Animate suitability bar widths
   const barRefs = useRef<(HTMLDivElement | null)[]>([]);
   useEffect(() => {
@@ -131,7 +133,19 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ properties, applications }) =
   ];
 
   return (
-    <div className="flex flex-col h-full w-full bg-gradient-to-br from-[#f0fff4] to-[#e6f7ed] p-6 overflow-y-auto">
+    <div className="flex flex-col h-full w-full bg-gradient-to-br from-[#f0fff4] to-[#e6f7ed] p-6 pb-8 overflow-y-auto">
+      {/* Back button */}
+      {onClose && (
+        <div className="flex items-center mb-4 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-2 px-3 py-2 bg-[#2d6a4f]/10 hover:bg-[#2d6a4f]/20 rounded-lg border border-[#2d6a4f]/20 transition-colors text-[#2d6a4f]"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="text-sm font-medium">Back to Editor</span>
+          </button>
+        </div>
+      )}
       {/* Top plastic comparison */}
       <div className="flex flex-col items-center mb-4 flex-shrink-0">
         <div className="flex gap-3 mb-2 flex-wrap justify-center">
