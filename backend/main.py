@@ -5,12 +5,13 @@ Inputs: SMILES strings, placed molecule data
 Outputs: Validation results, canonical SMILES, property predictions
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any, Optional
 import os
+from sqlalchemy.orm import Session
 
 from rdkit import Chem
 from rdkit.Chem import Descriptors, rdMolDescriptors
@@ -22,6 +23,10 @@ from schemas.molecule import (
     SmiRequest,
     SmilesValidationRequest,
     SmilesValidationResponse,
+)
+from schemas.tier3 import (
+    Tier3Request,
+    Tier3PredictionResponse,
 )
 from schemas.polymer import (
     HeuristicPredictedProperties,
@@ -39,8 +44,10 @@ from features.heuristics import predict_properties
 # from features.advanced_analysis import analyze_molecule_high_compute  # Moved to worker
 from schemas.analysis import AnalysisRequest, AnalysisResponse
 from schemas.task import TaskSubmissionResponse, TaskStatusResponse
-from worker import celery_app, analyze_molecule_task
+from worker import celery_app, analyze_molecule_task, predict_tier_3_task
 from celery.result import AsyncResult
+from database import get_db, init_db
+from models.task import Task
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -51,6 +58,14 @@ app = FastAPI(
     description="API for polymer SMILES validation and property prediction using RDKit.",
     version="1.0.0"
 )
+
+# Startup event to initialize database
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database schema on application startup."""
+    logger.info("Initializing database schema...")
+    init_db()
+    logger.info("Database schema initialized")
 
 # CORS middleware for frontend communication
 app.add_middleware(
@@ -133,7 +148,7 @@ def predict_heuristics(request: SmiRequest):
         raise ServerException(detail=str(e))
 
 @app.post("/predict/tier-2", status_code=202, response_model=ResponseModel[TaskSubmissionResponse])
-def analyze_high_compute(request: AnalysisRequest):
+def analyze_high_compute(request: AnalysisRequest, db: Session = Depends(get_db)):
     """
     Submit a high-compute analysis task to the Celery queue.
     
@@ -145,6 +160,17 @@ def analyze_high_compute(request: AnalysisRequest):
     """
     try:
         task = analyze_molecule_task.delay(request.smiles)
+        
+        # Create task record in database
+        db_task = Task(
+            task_id=task.id,
+            type="tier-2",
+            status="PENDING",
+            input_data={"smiles": request.smiles}
+        )
+        db.add(db_task)
+        db.commit()
+        
         return ResponseModel(
             status=202,
             message="Analysis submitted to queue",
@@ -156,43 +182,109 @@ def analyze_high_compute(request: AnalysisRequest):
         )
     except Exception as e:
         logger.error(f"Failed to submit analysis task: {e}")
+        db.rollback()
         raise ServerException(detail=str(e))
 
 @app.get("/tasks/{task_id}", response_model=ResponseModel[TaskStatusResponse])
-def get_task_status(task_id: str):
+def get_task_status(task_id: str, db: Session = Depends(get_db)):
     """
     Retrieve the status and result of a background task.
     
     Poll this endpoint using the `task_id` returned from the submission endpoint.
     It returns the current status (PENDING, PROGRESS, SUCCESS, FAILURE) and
     any available progress metadata or final results.
+    
+    This endpoint first queries the database for task information, then falls back
+    to the Celery result backend if needed.
     """
-    print("Checking task status for:", task_id)
-    task_result = AsyncResult(task_id, app=celery_app)
+    logger.info(f"Checking task status for: {task_id}")
     
-    response_data = TaskStatusResponse(
-        task_id=task_id,
-        status=task_result.status,
-    )
+    # Try to get task from database first
+    db_task = db.query(Task).filter(Task.task_id == task_id).first()
     
-    if task_result.status == 'SUCCESS':
-        # Ensure result is a dict, handle potential serialization issues if needed
-        response_data.result = task_result.result if isinstance(task_result.result, dict) else {"data": task_result.result}
-        response_data.progress = 100
+    if db_task:
+        # Use database record
+        response_data = TaskStatusResponse(
+            task_id=task_id,
+            status=db_task.status,
+            result=db_task.result,
+            error=db_task.error,
+            progress=db_task.progress,
+            message=db_task.progress_message
+        )
         
-    elif task_result.status == 'FAILURE':
-        response_data.error = str(task_result.result)
+        return ResponseModel(
+            status=200,
+            message=f"Task status: {db_task.status}",
+            data=response_data
+        )
+    else:
+        # Fallback to Celery result backend (for backward compatibility)
+        task_result = AsyncResult(task_id, app=celery_app)
         
-    elif task_result.status == 'PROGRESS':
-        meta = task_result.result if isinstance(task_result.result, dict) else {}
-        response_data.progress = meta.get('current', 0)
-        response_data.message = meta.get('status', '')
+        response_data = TaskStatusResponse(
+            task_id=task_id,
+            status=task_result.status,
+        )
         
-    return ResponseModel(
-        status=200,
-        message=f"Task status: {task_result.status}",
-        data=response_data
-    )
+        if task_result.status == 'SUCCESS':
+            response_data.result = task_result.result if isinstance(task_result.result, dict) else {"data": task_result.result}
+            response_data.progress = 100
+            
+        elif task_result.status == 'FAILURE':
+            response_data.error = str(task_result.result)
+            
+        elif task_result.status == 'PROGRESS':
+            meta = task_result.result if isinstance(task_result.result, dict) else {}
+            response_data.progress = meta.get('current', 0)
+            response_data.message = meta.get('status', '')
+            
+        return ResponseModel(
+            status=200,
+            message=f"Task status: {task_result.status}",
+            data=response_data
+        )
+
+@app.post("/predict/tier-3", status_code=202, response_model=ResponseModel[TaskSubmissionResponse])
+def predict_tier_3(request: Tier3Request, db: Session = Depends(get_db)):
+    """
+    Submit a tier-3 prediction task to the Celery queue.
+    
+    This endpoint accepts a SMILES string and offloads the prediction to a
+    background worker that communicates with the serverless GPU.
+    
+    Args:
+        request: Contains the SMILES string to analyze
+        
+    Returns:
+        ResponseModel containing the task_id and submission status.
+    """
+    try:
+        task = predict_tier_3_task.delay(request.smiles)
+        
+        # Create task record in database
+        db_task = Task(
+            task_id=task.id,
+            type="tier-3",
+            status="PENDING",
+            input_data={"smiles": request.smiles}
+        )
+        db.add(db_task)
+        db.commit()
+        
+        return ResponseModel(
+            status=202,
+            message="Tier-3 prediction submitted to queue",
+            data=TaskSubmissionResponse(
+                task_id=task.id,
+                status="submitted",
+                message="Tier-3 prediction submitted successfully"
+            )
+        )
+    except Exception as e:
+        logger.error(f"Failed to submit tier-3 prediction task: {e}")
+        db.rollback()
+        raise ServerException(detail=str(e))
 
 @app.post("/validate-smiles", response_model=ResponseModel[SmilesValidationResponse])
 def validate_smiles(request: SmilesValidationRequest):
