@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { predictTier2 } from '../services/services';
-import { TierTwoAnalysis } from '../types/api';
+import { predictTier3 } from '../services/services';
+import { TaskSubmission } from '../types/api';
 
 interface UseServiceState<T> {
     data: T | null;
@@ -8,8 +8,8 @@ interface UseServiceState<T> {
     error: string | null;
 }
 
-export const useTierTwoAnalysis = () => {
-    const [state, setState] = useState<UseServiceState<TierTwoAnalysis>>({
+export const useTierThreeAnalysis = () => {
+    const [state, setState] = useState<UseServiceState<TaskSubmission>>({
         data: null,
         loading: false,
         error: null,
@@ -18,7 +18,7 @@ export const useTierTwoAnalysis = () => {
     const submit = useCallback(async (smiles: string) => {
         setState(prev => ({ ...prev, loading: true, error: null }));
         try {
-            const response = await predictTier2(smiles);
+            const response = await predictTier3(smiles);
             setState({ data: response.data || null, loading: false, error: null });
             return response.data;
         } catch (err: any) {

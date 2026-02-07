@@ -2,13 +2,19 @@ import client from '../api/client';
 import {
     ResponseModel,
     TierOneAnalysis,
-    TaskSubmission,
+    TierTwoAnalysis,
     Task,
+    TaskDetail,
+    TaskListResponse,
+    TaskUpdateRequest,
+    TaskDeleteResponse,
     SmilesValidationResponse,
     ValidatePolymerRequest,
     ValidationResponse,
     Tier3AnalysisResult,
+    TaskSubmission,
 } from '../types/api';
+
 
 /**
  * Get Tier 3 Analysis Results (Leaderboard).
@@ -35,11 +41,24 @@ export const predictTier1 = async (smiles: string): Promise<ResponseModel<TierOn
 };
 
 /**
- * Submit a high-compute analysis task (Tier 2).
+ * Predict polymer properties using GNN model (Tier 2).
+ * Now synchronous - returns analysis directly.
  */
-export const predictTier2 = async (smiles: string): Promise<ResponseModel<TaskSubmission>> => {
+export const predictTier2 = async (smiles: string): Promise<ResponseModel<TierTwoAnalysis>> => {
     try {
-        const response = await client.post<ResponseModel<TaskSubmission>>('/predict/tier-2', { smiles });
+        const response = await client.post<ResponseModel<TierTwoAnalysis>>('/predict/tier-2', { smiles });
+        return response.data;
+    } catch (error: any) {
+        throw handleApiError(error);
+    }
+};
+
+/**
+ * Submit a tier-3 prediction task to the Celery queue (GPU-based analysis).
+ */
+export const predictTier3 = async (smiles: string): Promise<ResponseModel<TaskSubmission>> => {
+    try {
+        const response = await client.post<ResponseModel<TaskSubmission>>('/predict/tier-3', { smiles });
         return response.data;
     } catch (error: any) {
         throw handleApiError(error);
@@ -52,6 +71,50 @@ export const predictTier2 = async (smiles: string): Promise<ResponseModel<TaskSu
 export const getTaskStatus = async (taskId: string): Promise<ResponseModel<Task>> => {
     try {
         const response = await client.get<ResponseModel<Task>>(`/tasks/${taskId}`);
+        return response.data;
+    } catch (error: any) {
+        throw handleApiError(error);
+    }
+};
+
+/**
+ * List all tasks with optional filtering and pagination.
+ */
+export const listTasks = async (params?: {
+    type?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+}): Promise<ResponseModel<TaskListResponse>> => {
+    try {
+        const response = await client.get<ResponseModel<TaskListResponse>>('/tasks', { params });
+        return response.data;
+    } catch (error: any) {
+        throw handleApiError(error);
+    }
+};
+
+/**
+ * Update a task's details (status, progress, result, etc.).
+ */
+export const updateTask = async (
+    taskId: string,
+    updateData: TaskUpdateRequest
+): Promise<ResponseModel<TaskDetail>> => {
+    try {
+        const response = await client.patch<ResponseModel<TaskDetail>>(`/tasks/${taskId}`, updateData);
+        return response.data;
+    } catch (error: any) {
+        throw handleApiError(error);
+    }
+};
+
+/**
+ * Delete a task from the database.
+ */
+export const deleteTask = async (taskId: string): Promise<ResponseModel<TaskDeleteResponse>> => {
+    try {
+        const response = await client.delete<ResponseModel<TaskDeleteResponse>>(`/tasks/${taskId}`);
         return response.data;
     } catch (error: any) {
         throw handleApiError(error);

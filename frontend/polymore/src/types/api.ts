@@ -36,6 +36,42 @@ export interface Task {
     message?: string;
 }
 
+export interface TaskDetail {
+    id: number;
+    task_id: string;
+    type: string;
+    status: string;
+    input_data: Record<string, any>;
+    result?: Record<string, any>;
+    error?: string;
+    progress: number;
+    progress_message?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface TaskListResponse {
+    tasks: TaskDetail[];
+    total: number;
+    limit: number;
+    offset: number;
+}
+
+export interface TaskUpdateRequest {
+    status?: string;
+    progress?: number;
+    result?: Record<string, any>;
+    error?: string;
+    progress_message?: string;
+}
+
+export interface TaskDeleteResponse {
+    task_id: string;
+    deleted: boolean;
+    message: string;
+}
+
+
 // This might be the shape of 'result' in TaskStatusResponse when success
 export interface TierTwoAnalysis {
     strength: number;

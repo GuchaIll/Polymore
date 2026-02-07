@@ -50,7 +50,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
     optimizeStructure,
     optimizePositions,
     optimizeConnections,
-    predictProperties,
+    // predictProperties, // Removed unused
     // Move tool functions
     startMove,
     updateMovePosition,
@@ -70,14 +70,17 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
   const navigate = useNavigate();
 
   // Simulation Queue State
-  const [simulationPageOpen, setSimulationPageOpen] = useState(false);
   const [simulationQueue, setSimulationQueue] = useState<SimulationTask[]>([]);
   const [runningTask, setRunningTask] = useState<SimulationTask | null>(null);
   const [completedTasks, setCompletedTasks] = useState<SimulationTask[]>([]);
   const [isPaused, setIsPaused] = useState(false);
-  const [currentSmiles, setCurrentSmiles] = useState('');
   const simulationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pendingQueueAddRef = useRef<Set<string>>(new Set());
+
+  const [simulationPageOpen, setSimulationPageOpen] = useState(false);
+
+  // Kept for SimulationPage
+  const [currentSmiles, setCurrentSmiles] = useState('');
 
   const handleDragStart = useCallback((molecule: Molecule) => {
     setDraggedMolecule(molecule);
@@ -250,18 +253,16 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
       showToast('Predicting properties...');
       const predictionResult = await predictPropertiesFromBackend(smilesForPrediction);
 
-      console.log('Prediction result:', JSON.stringify(predictionResult, null, 2));
 
       if (predictionResult.success && predictionResult.properties) {
         // Map backend properties to our PredictedProperties format
-        // Backend returns values in 0-10 scale, we need 0-100 for display
+        // Backend returns values - normalize to 0-100 scale if needed
         const p = predictionResult.properties;
-        console.log('Properties from backend:', p);
 
         const normalize = (val: number | undefined, fallback: number) => {
           if (val === undefined || val === null) return fallback;
-          // Backend returns 0-10 scale, multiply by 10 to get 0-100
-          return val * 10;
+          // If value is already in 0-100 scale, use as is; otherwise multiply by 100
+          return val > 1 ? val : val * 100;
         };
 
         const props: PredictedProperties = {
@@ -270,12 +271,10 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
           degradability: normalize(p.degradability, 40),
           sustainability: normalize(p.sustainability, 55),
         };
-        console.log('Normalized props:', props);
         setPredictedProperties(props);
         setCurrentSmiles(smilesForPrediction);
         showToast('Properties predicted successfully!');
       } else {
-        console.log('Prediction failed:', predictionResult.error);
         // Show error message - no fallback since both use same backend
         showToast(predictionResult.error || 'Prediction failed');
       }
@@ -455,7 +454,6 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
       }
     };
   }, [runningTask, isPaused]);
-
   const handleImportSmiles = useCallback(async (smiles: string) => {
     if (!rdkitReady) {
       showToast('Chemistry engine loading...');
@@ -544,7 +542,7 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
               setResultsPageOpen(false);
             }}
             rdkitReady={rdkitReady}
-            simulationQueueCount={simulationQueue.length + (runningTask ? 1 : 0)}
+            simulationQueueCount={0}
             isSimulationView={simulationPageOpen}
             onResults={() => {
               setResultsPageOpen(prev => !prev);
@@ -563,14 +561,6 @@ const PolyForge: React.FC<PolyForgeProps> = ({ rdkitReady, rdkitError }) => {
             currentName={state.placedMolecules.length > 0
               ? `Polymer (${state.placedMolecules.length} units)`
               : 'Unnamed'}
-            queue={simulationQueue}
-            runningTask={runningTask}
-            completedTasks={completedTasks}
-            onAddToQueue={handleAddToQueue}
-            onRemoveFromQueue={handleRemoveFromQueue}
-            onClearCompleted={handleClearCompleted}
-            isPaused={isPaused}
-            onTogglePause={handleTogglePause}
             onAutoQueueAttempted={(_success: boolean, message: string) => showToast(message)}
             onClose={() => setSimulationPageOpen(false)}
           />

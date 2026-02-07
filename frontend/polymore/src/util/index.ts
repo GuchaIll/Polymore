@@ -14,7 +14,7 @@
  */
 
 import { PlacedMolecule, Position } from "../types";
-import { predictTier1 } from "../services/services";
+import { predictTier1, predictTier2 } from "../services/services";
 
 // =============================================================================
 // VALIDATION RULE DEFINITIONS
@@ -29,36 +29,36 @@ export enum ValidationRuleCode {
     RULE_2_DISCONNECTED = "RULE_2_DISCONNECTED",
     RULE_3_RING_CLOSURE = "RULE_3_RING_CLOSURE",
     RULE_4_INVALID_SYNTAX = "RULE_4_INVALID_SYNTAX",
-    
+
     // Layer 2 - Polymer-Specific Rules
     RULE_5_MIN_REACTIVE_SITES = "RULE_5_MIN_REACTIVE_SITES",
     RULE_6_FULLY_CAPPED = "RULE_6_FULLY_CAPPED",
     RULE_7_STERIC_HINDRANCE = "RULE_7_STERIC_HINDRANCE",
     RULE_8_REPEAT_SIZE = "RULE_8_REPEAT_SIZE",
-    
+
     // Layer 3 - ML-Friendly Rules
     RULE_9_NOT_CANONICAL = "RULE_9_NOT_CANONICAL",
     RULE_10_FORBIDDEN_ELEMENTS = "RULE_10_FORBIDDEN_ELEMENTS",
     RULE_11_RADICALS_CHARGES = "RULE_11_RADICALS_CHARGES",
-    
+
     // Polymerizability Rules
     RULE_P2_CROSSLINK_RISK = "RULE_P2_CROSSLINK_RISK",
-    
+
     // Mechanical/Physical Rules
     RULE_M1_TOO_FLEXIBLE = "RULE_M1_TOO_FLEXIBLE",
     RULE_M2_TOO_BRITTLE = "RULE_M2_TOO_BRITTLE",
     RULE_M3_WEAK_FORCES = "RULE_M3_WEAK_FORCES",
-    
+
     // Sustainability Rules
     RULE_S1_NON_DEGRADABLE = "RULE_S1_NON_DEGRADABLE",
     RULE_S2_HALOGEN_WARNING = "RULE_S2_HALOGEN_WARNING",
     RULE_S3_HIGH_MW_UNIT = "RULE_S3_HIGH_MW_UNIT",
-    
+
     // Canvas/Placement Rules
     CANVAS_NO_MOLECULES = "CANVAS_NO_MOLECULES",
     CANVAS_INVALID_STRUCTURE = "CANVAS_INVALID_STRUCTURE",
     CANVAS_SPATIAL_ERROR = "CANVAS_SPATIAL_ERROR",
-    
+
     // General
     RDKIT_NOT_LOADED = "RDKIT_NOT_LOADED",
     GENERATION_FAILED = "GENERATION_FAILED"
@@ -89,7 +89,7 @@ export const ValidationRuleMessages: Record<ValidationRuleCode, { title: string;
         description: "The SMILES string contains syntax errors and cannot be parsed by RDKit.",
         suggestion: "Check for unbalanced parentheses, invalid characters, or malformed notation."
     },
-    
+
     // Layer 2 - Polymer-Specific
     [ValidationRuleCode.RULE_5_MIN_REACTIVE_SITES]: {
         title: "Insufficient Reactive Sites",
@@ -111,7 +111,7 @@ export const ValidationRuleMessages: Record<ValidationRuleCode, { title: string;
         description: "The polymer repeat unit exceeds the maximum allowed size (100 atoms). Large units cause computational issues.",
         suggestion: "Break down into smaller repeating units or simplify the structure."
     },
-    
+
     // Layer 3 - ML-Friendly
     [ValidationRuleCode.RULE_9_NOT_CANONICAL]: {
         title: "Non-Canonical Form",
@@ -128,14 +128,14 @@ export const ValidationRuleMessages: Record<ValidationRuleCode, { title: string;
         description: "The structure contains radical species or formal charges that are typically unstable.",
         suggestion: "Neutralize charges and complete radical valences for stable polymer structures."
     },
-    
+
     // Polymerizability
     [ValidationRuleCode.RULE_P2_CROSSLINK_RISK]: {
         title: "Crosslink Risk - Over-Functionalized",
         description: "Too many reactive sites (>4) may cause crosslinking and form brittle networks instead of linear polymers.",
         suggestion: "Reduce functionality for linear polymers. Remove some reactive groups to prevent gel formation."
     },
-    
+
     // Mechanical/Physical Behavior
     [ValidationRuleCode.RULE_M1_TOO_FLEXIBLE]: {
         title: "Low Rigidity - High Flexibility",
@@ -152,7 +152,7 @@ export const ValidationRuleMessages: Record<ValidationRuleCode, { title: string;
         description: "Lack of polar groups reduces intermolecular interactions, potentially weakening the material.",
         suggestion: "Add -OH, -NH, or ester groups to improve strength through hydrogen bonding."
     },
-    
+
     // Sustainability
     [ValidationRuleCode.RULE_S1_NON_DEGRADABLE]: {
         title: "Non-Biodegradable Backbone",
@@ -169,7 +169,7 @@ export const ValidationRuleMessages: Record<ValidationRuleCode, { title: string;
         description: "Large repeat units may hinder degradability and processing efficiency.",
         suggestion: "Consider simplifying the monomer for better processability and degradation."
     },
-    
+
     // Canvas/Placement
     [ValidationRuleCode.CANVAS_NO_MOLECULES]: {
         title: "No Molecules Placed",
@@ -186,7 +186,7 @@ export const ValidationRuleMessages: Record<ValidationRuleCode, { title: string;
         description: "Bond distances are invalid - molecules are either too far apart or overlapping.",
         suggestion: "Adjust molecule positions to appropriate bonding distances."
     },
-    
+
     // General
     [ValidationRuleCode.RDKIT_NOT_LOADED]: {
         title: "Chemistry Engine Not Ready",
@@ -269,23 +269,23 @@ export const initRDKit = async (): Promise<RDKitModule> => {
     if (rdkitInstance) {
         return rdkitInstance;
     }
-    
+
     if (rdkitInitPromise) {
         return rdkitInitPromise;
     }
-    
+
     rdkitInitPromise = (async () => {
         // Use global initRDKitModule loaded via CDN script tag
         if (typeof window.initRDKitModule !== 'function') {
             throw new Error("RDKit.js not loaded - ensure the CDN script is included in index.html");
         }
-        
+
         const rdkit = await window.initRDKitModule();
         rdkitInstance = rdkit;
         console.log("RDKit.js initialized successfully, version:", rdkitInstance.version());
         return rdkitInstance;
     })();
-    
+
     return rdkitInitPromise;
 };
 
@@ -364,14 +364,14 @@ const buildAdjacencyMap = (molecules: PlacedMolecule[]): Map<number, number[]> =
  */
 const detectCycles = (molecules: PlacedMolecule[]): boolean => {
     if (molecules.length === 0) return false;
-    
+
     const visited = new Set<number>();
     const adjacencyMap = buildAdjacencyMap(molecules);
-    
+
     const hasCycle = (nodeId: number, parentId: number | null): boolean => {
         visited.add(nodeId);
         const neighbors = adjacencyMap.get(nodeId) || [];
-        
+
         for (const neighbor of neighbors) {
             if (!visited.has(neighbor)) {
                 if (hasCycle(neighbor, nodeId)) return true;
@@ -381,13 +381,13 @@ const detectCycles = (molecules: PlacedMolecule[]): boolean => {
         }
         return false;
     };
-    
+
     for (const mol of molecules) {
         if (!visited.has(mol.id)) {
             if (hasCycle(mol.id, null)) return true;
         }
     }
-    
+
     return false;
 };
 
@@ -396,17 +396,17 @@ const detectCycles = (molecules: PlacedMolecule[]): boolean => {
  */
 const classifyPolymerType = (molecules: PlacedMolecule[]): ValidationResult['polymerType'] => {
     if (molecules.length === 0) return 'unknown';
-    
+
     if (detectCycles(molecules)) return 'cyclic';
-    
+
     const hasBranching = molecules.some(mol => mol.connections.length > 2);
     if (hasBranching) return 'branched';
-    
+
     const endPoints = molecules.filter(mol => mol.connections.length <= 1);
     if (endPoints.length === 2 || (endPoints.length === 0 && molecules.length === 1)) {
         return 'linear';
     }
-    
+
     return 'unknown';
 };
 
@@ -419,7 +419,7 @@ export const validateSmiles = async (smiles: string): Promise<SmilesValidationRe
     try {
         const rdkit = await getRDKit();
         const mol = rdkit.get_mol(smiles);
-        
+
         if (!mol) {
             return {
                 isValid: false,
@@ -427,12 +427,12 @@ export const validateSmiles = async (smiles: string): Promise<SmilesValidationRe
                 error: "Invalid SMILES: could not parse molecule"
             };
         }
-        
+
         try {
             const canonical = mol.get_smiles();
             const descriptors = JSON.parse(mol.get_descriptors());
             const molWeight = descriptors.exactmw;
-            
+
             return {
                 isValid: true,
                 canonicalSmiles: canonical,
@@ -460,9 +460,9 @@ export const getCanonicalSmiles = async (smiles: string): Promise<string> => {
     try {
         const rdkit = await getRDKit();
         const mol = rdkit.get_mol(smiles);
-        
+
         if (!mol) return smiles;
-        
+
         try {
             return mol.get_smiles();
         } finally {
@@ -478,23 +478,23 @@ export const getCanonicalSmiles = async (smiles: string): Promise<string> => {
  */
 export const validatePlacedMolecule = (molecules: PlacedMolecule[]): boolean => {
     if (!molecules || molecules.length === 0) return false;
-    
+
     const idSet = new Set<number>();
-    
+
     for (const mol of molecules) {
         if (typeof mol.id !== 'number' || isNaN(mol.id)) return false;
         if (idSet.has(mol.id)) return false;
         idSet.add(mol.id);
-        
-        if (!mol.position || 
+
+        if (!mol.position ||
             typeof mol.position.x !== 'number' || isNaN(mol.position.x) ||
             typeof mol.position.y !== 'number' || isNaN(mol.position.y) ||
             typeof mol.position.z !== 'number' || isNaN(mol.position.z)) {
             return false;
         }
-        
+
         if (!mol.smiles || typeof mol.smiles !== 'string') return false;
-        
+
         if (mol.connections) {
             for (const connId of mol.connections) {
                 if (!idSet.has(connId) && !molecules.some(m => m.id === connId)) {
@@ -503,7 +503,7 @@ export const validatePlacedMolecule = (molecules: PlacedMolecule[]): boolean => 
             }
         }
     }
-    
+
     return true;
 };
 
@@ -511,12 +511,12 @@ export const validatePlacedMolecule = (molecules: PlacedMolecule[]): boolean => 
  * Validate spatial arrangement of molecules
  */
 export const validateSpatialArrangement = (
-    molecules: PlacedMolecule[], 
+    molecules: PlacedMolecule[],
     config: ValidationConfig = DEFAULT_CONFIG
 ): { isValid: boolean; errors: string[] } => {
     const errors: string[] = [];
     const molMap = new Map(molecules.map(m => [m.id, m]));
-    
+
     for (const mol of molecules) {
         if (mol.connections.length > config.maxConnectionsPerAtom) {
             errors.push(
@@ -524,23 +524,23 @@ export const validateSpatialArrangement = (
                 `exceeds maximum of ${config.maxConnectionsPerAtom}`
             );
         }
-        
+
         for (const connId of mol.connections) {
             const connMol = molMap.get(connId);
             if (!connMol) {
                 errors.push(`${mol.name} references non-existent molecule ID: ${connId}`);
                 continue;
             }
-            
+
             const distance = calculateDistance(mol.position, connMol.position);
-            
+
             if (distance > config.maxBondDistance) {
                 errors.push(
                     `Bond between ${mol.name} and ${connMol.name} is too long ` +
                     `(${distance.toFixed(2)} > ${config.maxBondDistance})`
                 );
             }
-            
+
             if (distance < config.minBondDistance) {
                 errors.push(
                     `${mol.name} and ${connMol.name} are too close ` +
@@ -549,7 +549,7 @@ export const validateSpatialArrangement = (
             }
         }
     }
-    
+
     return { isValid: errors.length === 0, errors };
 };
 
@@ -561,50 +561,50 @@ export const generateSmiles = async (molecules: PlacedMolecule[]): Promise<strin
     if (!validatePlacedMolecule(molecules)) {
         throw new Error("Invalid molecule data");
     }
-    
+
     if (molecules.length === 0) return "";
     if (molecules.length === 1) return molecules[0].smiles;
-    
+
     const molMap = new Map(molecules.map(m => [m.id, m]));
     const visited = new Set<number>();
     const smilesFragments: string[] = [];
-    
+
     const traverseAndBuild = (currentId: number): string => {
         if (visited.has(currentId)) return "";
-        
+
         visited.add(currentId);
         const current = molMap.get(currentId);
         if (!current) return "";
-        
+
         let smiles = current.smiles;
         const unvisitedNeighbors = current.connections.filter(id => !visited.has(id));
-        
+
         if (unvisitedNeighbors.length === 0) return smiles;
-        
+
         const mainChainSmiles = traverseAndBuild(unvisitedNeighbors[0]);
         if (mainChainSmiles) smiles += mainChainSmiles;
-        
+
         for (let i = 1; i < unvisitedNeighbors.length; i++) {
             const branchSmiles = traverseAndBuild(unvisitedNeighbors[i]);
             if (branchSmiles) smiles += `(${branchSmiles})`;
         }
-        
+
         return smiles;
     };
-    
+
     const endPoints = molecules.filter(m => m.connections.length === 1);
     const startMol = endPoints.length > 0 ? endPoints[0] : molecules[0];
-    
+
     const mainSmiles = traverseAndBuild(startMol.id);
     smilesFragments.push(mainSmiles);
-    
+
     for (const mol of molecules) {
         if (!visited.has(mol.id)) {
             const componentSmiles = traverseAndBuild(mol.id);
             if (componentSmiles) smilesFragments.push(componentSmiles);
         }
     }
-    
+
     return smilesFragments.join('.');
 };
 
@@ -618,7 +618,7 @@ export const validatePolymerConfiguration = async (
 ): Promise<ValidationResult> => {
     const errors: string[] = [];
     const warnings: string[] = [];
-    
+
     if (!molecules || molecules.length === 0) {
         return {
             isValid: false,
@@ -629,16 +629,16 @@ export const validatePolymerConfiguration = async (
             polymerType: 'unknown'
         };
     }
-    
+
     // Structural validation
     if (!validatePlacedMolecule(molecules)) {
         errors.push("Invalid molecule data structure");
     }
-    
+
     // Spatial validation
     const spatialResult = validateSpatialArrangement(molecules, config);
     errors.push(...spatialResult.errors);
-    
+
     // Disconnected molecules warning
     const disconnected = molecules.filter(m => m.connections.length === 0);
     if (disconnected.length > 0 && molecules.length > 1) {
@@ -646,7 +646,7 @@ export const validatePolymerConfiguration = async (
             `${disconnected.length} molecules not connected: ${disconnected.map(m => m.name).join(', ')}`
         );
     }
-    
+
     // Validate individual SMILES with RDKit.js
     for (const mol of molecules) {
         const validation = await validateSmiles(mol.smiles);
@@ -654,17 +654,17 @@ export const validatePolymerConfiguration = async (
             errors.push(`Invalid SMILES for ${mol.name}: ${validation.error}`);
         }
     }
-    
+
     const polymerType = classifyPolymerType(molecules);
-    
+
     // Generate and validate combined SMILES
     let smiles = "";
     let canonicalSmiles = "";
     let molecularWeight: number | undefined;
-    
+
     try {
         smiles = await generateSmiles(molecules);
-        
+
         // Validate combined SMILES with RDKit.js
         const combinedValidation = await validateSmiles(smiles);
         if (combinedValidation.isValid) {
@@ -674,14 +674,14 @@ export const validatePolymerConfiguration = async (
             warnings.push("Combined SMILES may not represent a single molecule");
             canonicalSmiles = smiles;
         }
-        
+
         if (polymerType === 'linear' && molecules.length > 2) {
             warnings.push("Consider using pSMILES notation [*]...[*] for repeating units");
         }
     } catch (error) {
         errors.push(`Failed to generate SMILES: ${error}`);
     }
-    
+
     return {
         isValid: errors.length === 0,
         smiles,
@@ -709,16 +709,16 @@ export const convertToPSMILES = (smiles: string, repeatUnit: boolean = true): st
  * @returns SVG string or null if invalid
  */
 export const getMoleculeSVG = async (
-    smiles: string, 
-    width: number = 300, 
+    smiles: string,
+    width: number = 300,
     height: number = 200
 ): Promise<string | null> => {
     try {
         const rdkit = await getRDKit();
         const mol = rdkit.get_mol(smiles);
-        
+
         if (!mol) return null;
-        
+
         try {
             return mol.get_svg(width, height);
         } finally {
@@ -738,9 +738,9 @@ export const getMolecularDescriptors = async (smiles: string): Promise<Record<st
     try {
         const rdkit = await getRDKit();
         const mol = rdkit.get_mol(smiles);
-        
+
         if (!mol) return null;
-        
+
         try {
             const descriptorsJson = mol.get_descriptors();
             return JSON.parse(descriptorsJson);
@@ -763,9 +763,9 @@ export const hasSubstructure = async (smiles: string, pattern: string): Promise<
         const rdkit = await getRDKit();
         const mol = rdkit.get_mol(smiles);
         const query = rdkit.get_qmol(pattern);
-        
+
         if (!mol || !query) return false;
-        
+
         try {
             const match = mol.get_substruct_match(query);
             return match !== "{}";
@@ -781,7 +781,7 @@ export const hasSubstructure = async (smiles: string, pattern: string): Promise<
 /**
  * Detect functional groups in a molecule using SMARTS patterns
  */
-export const detectFunctionalGroups = async (smiles: string): Promise<Array<{name: string; count: number}>> => {
+export const detectFunctionalGroups = async (smiles: string): Promise<Array<{ name: string; count: number }>> => {
     const patterns: Record<string, string> = {
         ester: "[#6][CX3](=O)[OX2H0][#6]",
         carboxylic_acid: "[CX3](=O)[OX2H1]",
@@ -796,23 +796,24 @@ export const detectFunctionalGroups = async (smiles: string): Promise<Array<{nam
         aromatic: "c1ccccc1",
         halide: "[#6][F,Cl,Br,I]"
     };
-    
-    const results: Array<{name: string; count: number}> = [];
-    
+
+    const results: Array<{ name: string; count: number }> = [];
+
     try {
         const rdkit = await getRDKit();
         const mol = rdkit.get_mol(smiles);
-        
+
         if (!mol) return results;
-        
+
         try {
-            for (const [name, smartsPattern] of Object.entries(patterns)) {
-                const query = rdkit.get_qmol(smartsPattern);
+            for (const [name, pattern] of Object.entries(patterns)) {
+                const query = rdkit.get_qmol(pattern);
                 if (query) {
                     const matches = mol.get_substruct_matches(query);
-                    const matchArray = JSON.parse(matches);
-                    if (matchArray.length > 0) {
-                        results.push({ name, count: matchArray.length });
+                    // Parse matches string "[[0,1],[2,3]]" to count
+                    const count = (matches.match(/\[/g) || []).length / 2; // Rough count approximation
+                    if (count > 0) {
+                        results.push({ name, count });
                     }
                     query.delete();
                 }
@@ -820,12 +821,19 @@ export const detectFunctionalGroups = async (smiles: string): Promise<Array<{nam
         } finally {
             mol.delete();
         }
-    } catch {
-        // Return empty results on error
+    } catch (e) {
+        console.error("Functional group detection failed:", e);
     }
-    
+
     return results;
 };
+
+
+
+
+
+
+
 
 // =============================================================================
 // POLYMER PROPERTY ANALYSIS (For Optimization Rules)
@@ -838,34 +846,34 @@ export const detectFunctionalGroups = async (smiles: string): Promise<Array<{nam
 const POLYMER_ANALYSIS_PATTERNS = {
     // Rotatable bonds - single bonds that can freely rotate (flexibility indicator)
     rotatable_bond: "[!$(*#*)&!D1]-&!@[!$(*#*)&!D1]",
-    
+
     // Aromatic systems (rigidity indicator)
     aromatic_ring: "c1ccccc1",
     aromatic_atom: "[c,n,o,s]",
-    
+
     // Polar groups (intermolecular force indicator)
     h_bond_donor: "[#7,#8,#9;H]",  // N-H, O-H, F-H
     h_bond_acceptor: "[#7,#8,#9;!H0]",  // N, O, F with lone pairs
     hydroxyl: "[OX2H]",
     amine: "[NX3;H2,H1]",
-    
+
     // Degradable linkages (sustainability indicator)
     ester_linkage: "[#6][CX3](=O)[OX2][#6]",
     amide_linkage: "[NX3][CX3](=[OX1])[#6]",
     carbonate_linkage: "[OX2][CX3](=[OX1])[OX2]",
     urethane_linkage: "[NX3][CX3](=[OX1])[OX2]",
-    
+
     // Halogens (environmental concern)
     fluorine: "[F]",
     chlorine: "[Cl]",
     bromine: "[Br]",
     iodine: "[I]",
     any_halogen: "[F,Cl,Br,I]",
-    
+
     // Unsaturation (rigidity/reactivity)
     double_bond: "[CX3]=[CX3]",
     triple_bond: "[CX2]#[CX2]",
-    
+
     // Connection points for pSMILES
     star_atom: "[#0]"  // [*] wildcard
 };
@@ -880,37 +888,37 @@ export interface PolymerAnalysis {
     aromaticRings: number;
     doubleBonds: number;
     tripleBonds: number;
-    
+
     // Polar groups
     hBondDonors: number;
     hBondAcceptors: number;
     hydroxylGroups: number;
     amineGroups: number;
-    
+
     // Degradable linkages
     esterLinkages: number;
     amideLinkages: number;
     carbonateLinkages: number;
     urethaneLinkages: number;
     totalDegradableLinkages: number;
-    
+
     // Halogens
     fluorineCount: number;
     chlorineCount: number;
     bromineCount: number;
     iodineCount: number;
     totalHalogens: number;
-    
+
     // Reactive sites
     reactiveSites: number;
     connectionPoints: number;
-    
+
     // Derived metrics (computed from counts)
     flexibilityScore: number;      // 0-100: higher = more flexible
     rigidityScore: number;         // 0-100: higher = more rigid
     polarityScore: number;         // 0-100: higher = more polar
     sustainabilityScore: number;   // 0-100: higher = more sustainable
-    
+
     // Molecular info
     atomCount: number;
     estimatedMW: number;
@@ -923,13 +931,13 @@ const countPatternMatches = async (smiles: string, pattern: string): Promise<num
     try {
         const rdkit = await getRDKit();
         const mol = rdkit.get_mol(smiles);
-        
+
         if (!mol) return 0;
-        
+
         try {
             const query = rdkit.get_qmol(pattern);
             if (!query) return 0;
-            
+
             try {
                 const matches = mol.get_substruct_matches(query);
                 const matchArray = JSON.parse(matches);
@@ -995,32 +1003,32 @@ export const analyzePolymerStructure = async (smiles: string): Promise<PolymerAn
         countPatternMatches(smiles, POLYMER_ANALYSIS_PATTERNS.star_atom),
         countReactiveSites(smiles)
     ]);
-    
+
     const totalDegradableLinkages = esterLinkages + amideLinkages + carbonateLinkages + urethaneLinkages;
     const totalHalogens = fluorineCount + chlorineCount + bromineCount + iodineCount;
     const atomCount = countAtomsInSmiles(smiles);
-    
+
     // Calculate derived scores (0-100 scale)
-    
+
     // Flexibility: high rotatable bonds + low aromatics = flexible
     // Normalize by atom count to make comparable across molecules
     const normalizedRotatable = atomCount > 0 ? (rotatableBonds / atomCount) * 100 : 0;
     const normalizedAromatic = atomCount > 0 ? (aromaticAtoms / atomCount) * 100 : 0;
-    const flexibilityScore = Math.min(100, Math.max(0, 
+    const flexibilityScore = Math.min(100, Math.max(0,
         normalizedRotatable * 2 - normalizedAromatic
     ));
-    
+
     // Rigidity: high aromatics + double bonds = rigid
     const rigidityScore = Math.min(100, Math.max(0,
         normalizedAromatic + (doubleBonds / Math.max(1, atomCount)) * 50
     ));
-    
+
     // Polarity: polar groups relative to size
     const polarGroups = hBondDonors + hBondAcceptors;
     const polarityScore = Math.min(100, Math.max(0,
         atomCount > 0 ? (polarGroups / atomCount) * 200 : 0
     ));
-    
+
     // Sustainability: degradable linkages, no halogens
     // Higher score = more sustainable
     const sustainabilityScore = Math.min(100, Math.max(0,
@@ -1028,10 +1036,10 @@ export const analyzePolymerStructure = async (smiles: string): Promise<PolymerAn
         (totalHalogens === 0 ? 30 : -totalHalogens * 10) +
         (atomCount < 50 ? 20 : 0)
     ));
-    
+
     // Estimate MW (rough approximation)
     const estimatedMW = atomCount * 12; // Rough average atomic mass
-    
+
     return {
         rotatableBonds,
         aromaticAtoms,
@@ -1089,11 +1097,11 @@ export interface SmilesRepairResult {
  */
 const extractLargestFragment = (smiles: string): string => {
     if (!smiles.includes('.')) return smiles;
-    
+
     const fragments = smiles.split('.');
     let largest = fragments[0];
     let maxAtoms = countAtomsInSmiles(largest);
-    
+
     for (let i = 1; i < fragments.length; i++) {
         const atomCount = countAtomsInSmiles(fragments[i]);
         if (atomCount > maxAtoms) {
@@ -1101,7 +1109,7 @@ const extractLargestFragment = (smiles: string): string => {
             largest = fragments[i];
         }
     }
-    
+
     return largest;
 };
 
@@ -1116,16 +1124,16 @@ const repairRingNotation = (smiles: string): string => {
     // Find all ring digits used
     const ringDigits: Map<string, number> = new Map();
     let cleanSmiles = smiles;
-    
+
     // Count occurrences of each ring digit (1-9, %10-%99)
     // eslint-disable-next-line no-useless-escape
     const digitPattern = /(%\d{2}|\d)(?![^\[]*\])/g;
     const matches = smiles.match(digitPattern) || [];
-    
+
     for (const digit of matches) {
         ringDigits.set(digit, (ringDigits.get(digit) || 0) + 1);
     }
-    
+
     // Ring digits should appear in pairs - remove unpaired ones
     ringDigits.forEach((count, digit) => {
         if (count % 2 !== 0) {
@@ -1136,7 +1144,7 @@ const repairRingNotation = (smiles: string): string => {
             }
         }
     });
-    
+
     return cleanSmiles;;
 };
 
@@ -1150,7 +1158,7 @@ const repairRingNotation = (smiles: string): string => {
 const balanceParentheses = (smiles: string): string => {
     let openCount = 0;
     let result = '';
-    
+
     for (const char of smiles) {
         if (char === '(') {
             openCount++;
@@ -1165,13 +1173,13 @@ const balanceParentheses = (smiles: string): string => {
             result += char;
         }
     }
-    
+
     // Add missing closing parentheses
     while (openCount > 0) {
         result += ')';
         openCount--;
     }
-    
+
     return result;
 };
 
@@ -1187,7 +1195,7 @@ const convertTopSMILES = (smiles: string): string => {
     if (smiles.includes('[*]') || smiles.includes('[#0]')) {
         return smiles;
     }
-    
+
     // Add connection points at both ends
     return `[*]${smiles}[*]`;
 };
@@ -1210,7 +1218,7 @@ const convertTopSMILES = (smiles: string): string => {
 export const repairSmiles = async (smiles: string): Promise<SmilesRepairResult> => {
     const repairSteps: string[] = [];
     let currentSmiles = smiles.trim();
-    
+
     // Handle empty input
     if (!currentSmiles) {
         return {
@@ -1223,12 +1231,12 @@ export const repairSmiles = async (smiles: string): Promise<SmilesRepairResult> 
             error: 'Empty SMILES string'
         };
     }
-    
+
     // Step 1: Try direct validation and canonicalization
     try {
         const rdkit = await getRDKit();
         const mol = rdkit.get_mol(currentSmiles);
-        
+
         if (mol) {
             try {
                 const canonical = mol.get_smiles();
@@ -1247,16 +1255,16 @@ export const repairSmiles = async (smiles: string): Promise<SmilesRepairResult> 
     } catch {
         // Continue to repair steps
     }
-    
+
     repairSteps.push('Original SMILES invalid - attempting repair');
-    
+
     // Step 2: Extract largest fragment (removes salts, counterions)
     if (currentSmiles.includes('.')) {
         const largestFragment = extractLargestFragment(currentSmiles);
         if (largestFragment !== currentSmiles) {
             currentSmiles = largestFragment;
             repairSteps.push('Removed disconnected fragments (salts/counterions)');
-            
+
             // Try validation after fragment extraction
             const validation = await validateSmiles(currentSmiles);
             if (validation.isValid && validation.canonicalSmiles) {
@@ -1271,13 +1279,13 @@ export const repairSmiles = async (smiles: string): Promise<SmilesRepairResult> 
             }
         }
     }
-    
+
     // Step 3: Balance parentheses
     const balanced = balanceParentheses(currentSmiles);
     if (balanced !== currentSmiles) {
         currentSmiles = balanced;
         repairSteps.push('Balanced parentheses');
-        
+
         const validation = await validateSmiles(currentSmiles);
         if (validation.isValid && validation.canonicalSmiles) {
             return {
@@ -1290,13 +1298,13 @@ export const repairSmiles = async (smiles: string): Promise<SmilesRepairResult> 
             };
         }
     }
-    
+
     // Step 4: Repair ring notation
     const ringRepaired = repairRingNotation(currentSmiles);
     if (ringRepaired !== currentSmiles) {
         currentSmiles = ringRepaired;
         repairSteps.push('Repaired ring notation');
-        
+
         const validation = await validateSmiles(currentSmiles);
         if (validation.isValid && validation.canonicalSmiles) {
             return {
@@ -1309,13 +1317,13 @@ export const repairSmiles = async (smiles: string): Promise<SmilesRepairResult> 
             };
         }
     }
-    
+
     // Step 5: Try lenient parsing (RDKit with relaxed rules)
     try {
         const rdkit = await getRDKit();
         // Try parsing with sanitize=false equivalent - use details_json
         const mol = rdkit.get_mol(currentSmiles, JSON.stringify({ sanitize: false }));
-        
+
         if (mol) {
             try {
                 // Try to get a valid SMILES even from partially parsed molecule
@@ -1338,7 +1346,7 @@ export const repairSmiles = async (smiles: string): Promise<SmilesRepairResult> 
     } catch {
         // Continue to next step
     }
-    
+
     // Step 6: Strip to just atoms (last resort)
     // Remove all non-essential characters and try to build basic structure
     const atomsOnly = currentSmiles.replace(/[^A-Za-z]/g, '');
@@ -1356,7 +1364,7 @@ export const repairSmiles = async (smiles: string): Promise<SmilesRepairResult> 
             };
         }
     }
-    
+
     // All repair attempts failed
     repairSteps.push('All repair attempts failed');
     return {
@@ -1386,26 +1394,26 @@ export const smartSmilesConvert = async (
     } = {}
 ): Promise<SmilesRepairResult> => {
     let result = await repairSmiles(smiles);
-    
+
     if (!result.success) {
         return result;
     }
-    
+
     let finalSmiles = result.canonical || result.repaired;
     const additionalSteps: string[] = [];
-    
+
     // Remove fragments if requested
     if (options.removeFragments && finalSmiles.includes('.')) {
         finalSmiles = extractLargestFragment(finalSmiles);
         additionalSteps.push('Removed additional fragments');
     }
-    
+
     // Convert to pSMILES if requested
     if (options.convertTopSMILES && !finalSmiles.includes('[*]')) {
         finalSmiles = convertTopSMILES(finalSmiles);
         additionalSteps.push('Converted to pSMILES format');
     }
-    
+
     return {
         ...result,
         repaired: finalSmiles,
@@ -1442,7 +1450,7 @@ const REACTIVE_SITE_PATTERNS: Record<string, string> = {
  */
 const checkAllowedElements = (smiles: string): { valid: boolean; forbidden: string[] } => {
     const forbidden: string[] = [];
-    
+
     // Extract element symbols from SMILES (simplified parsing)
     const elementPattern = /\[([A-Z][a-z]?)/g;
     let match;
@@ -1452,7 +1460,7 @@ const checkAllowedElements = (smiles: string): { valid: boolean; forbidden: stri
             forbidden.push(element);
         }
     }
-    
+
     // Check uppercase letters outside brackets (organic subset)
     const organicPattern = /(?<!\[)([A-Z][a-z]?)(?![a-z\]])/g;
     while ((match = organicPattern.exec(smiles)) !== null) {
@@ -1467,7 +1475,7 @@ const checkAllowedElements = (smiles: string): { valid: boolean; forbidden: stri
             }
         }
     }
-    
+
     return { valid: forbidden.length === 0, forbidden: Array.from(new Set(forbidden)) };
 };
 
@@ -1478,11 +1486,11 @@ const checkRadicalsAndCharges = (smiles: string): { hasRadicals: boolean; hasCha
     // Check for explicit charges in brackets [X+], [X-], [X+2], etc.
     const chargePattern = /\[[^\]]*[+-]\d*\]/;
     const hasCharges = chargePattern.test(smiles);
-    
+
     // Check for radical notation (rare in SMILES but possible)
     const radicalPattern = /\[[^\]]*\.\]/;
     const hasRadicals = radicalPattern.test(smiles);
-    
+
     return { hasRadicals, hasCharges };
 };
 
@@ -1495,12 +1503,12 @@ const countAtomsInSmiles = (smiles: string): number => {
     const bracketPattern = /\[[^\]]+\]/g;
     const bracketAtoms = smiles.match(bracketPattern) || [];
     count += bracketAtoms.length;
-    
+
     // Remove bracket expressions and count remaining uppercase letters
     const withoutBrackets = smiles.replace(bracketPattern, '');
     const organicAtoms = withoutBrackets.match(/[A-Z]/g) || [];
     count += organicAtoms.length;
-    
+
     // Add implicit hydrogens estimate (simplified)
     return count;
 };
@@ -1518,13 +1526,13 @@ const checkDisconnectedFragments = (smiles: string): boolean => {
  */
 const countReactiveSites = async (smiles: string): Promise<number> => {
     let totalSites = 0;
-    
+
     try {
         const rdkit = await getRDKit();
         const mol = rdkit.get_mol(smiles);
-        
+
         if (!mol) return 0;
-        
+
         try {
             for (const smartsPattern of Object.values(REACTIVE_SITE_PATTERNS)) {
                 const query = rdkit.get_qmol(smartsPattern);
@@ -1541,7 +1549,7 @@ const countReactiveSites = async (smiles: string): Promise<number> => {
     } catch {
         return 0;
     }
-    
+
     return totalSites;
 };
 
@@ -1562,14 +1570,14 @@ export const validatePolymerComprehensive = async (
 ): Promise<PolymerValidationResult> => {
     const errors: ValidationError[] = [];
     const warnings: ValidationError[] = [];
-    
+
     // Track which layers were checked
     const rulesChecked = {
         layer1: false,
         layer2: false,
         layer3: false
     };
-    
+
     // === CANVAS VALIDATION ===
     if (!molecules || molecules.length === 0) {
         errors.push({
@@ -1586,7 +1594,7 @@ export const validatePolymerComprehensive = async (
             rulesChecked
         };
     }
-    
+
     // Check canvas structure
     if (!validatePlacedMolecule(molecules)) {
         errors.push({
@@ -1594,7 +1602,7 @@ export const validatePolymerComprehensive = async (
             message: ValidationRuleMessages[ValidationRuleCode.CANVAS_INVALID_STRUCTURE].title
         });
     }
-    
+
     // Check spatial arrangement
     const spatialResult = validateSpatialArrangement(molecules);
     if (!spatialResult.isValid) {
@@ -1606,7 +1614,7 @@ export const validatePolymerComprehensive = async (
             });
         }
     }
-    
+
     // Check for RDKit availability
     let rdkitAvailable = false;
     try {
@@ -1618,10 +1626,10 @@ export const validatePolymerComprehensive = async (
             message: ValidationRuleMessages[ValidationRuleCode.RDKIT_NOT_LOADED].title
         });
     }
-    
+
     // === LAYER 1: Basic Chemistry Validity ===
     rulesChecked.layer1 = true;
-    
+
     // Validate each molecule's SMILES
     for (const mol of molecules) {
         if (rdkitAvailable) {
@@ -1638,13 +1646,13 @@ export const validatePolymerComprehensive = async (
             }
         }
     }
-    
+
     // Generate combined SMILES
     let smiles = "";
     let canonicalSmiles = "";
     let molecularWeight: number | undefined;
     let atomCount: number | undefined;
-    
+
     try {
         smiles = await generateSmiles(molecules);
     } catch (error) {
@@ -1663,7 +1671,7 @@ export const validatePolymerComprehensive = async (
             rulesChecked
         };
     }
-    
+
     // Rule 2 - Check for disconnected fragments
     if (checkDisconnectedFragments(smiles)) {
         // Check if disconnection is intentional (multiple separate molecules)
@@ -1679,7 +1687,7 @@ export const validatePolymerComprehensive = async (
             }
         }
     }
-    
+
     // Validate combined SMILES with RDKit
     if (rdkitAvailable && smiles) {
         const combinedValidation = await validateSmiles(smiles);
@@ -1714,10 +1722,10 @@ export const validatePolymerComprehensive = async (
             canonicalSmiles = smiles;
         }
     }
-    
+
     // === LAYER 2: Polymer-Specific Rules ===
     rulesChecked.layer2 = true;
-    
+
     // Rule 5 - Check for minimum reactive sites
     if (rdkitAvailable && smiles) {
         const reactiveSites = await countReactiveSites(smiles);
@@ -1730,7 +1738,7 @@ export const validatePolymerComprehensive = async (
             });
         }
     }
-    
+
     // Rule 6 - Check if fully capped
     if (rdkitAvailable && smiles && molecules.length === 1) {
         const capped = await isFullyCapped(smiles);
@@ -1742,7 +1750,7 @@ export const validatePolymerComprehensive = async (
             });
         }
     }
-    
+
     // Rule 8 - Check repeat unit size
     atomCount = countAtomsInSmiles(smiles);
     if (atomCount > MAX_ATOM_COUNT) {
@@ -1752,10 +1760,10 @@ export const validatePolymerComprehensive = async (
             details: `Structure has approximately ${atomCount} atoms (max: ${MAX_ATOM_COUNT}).`
         });
     }
-    
+
     // === LAYER 3: ML-Friendly Rules ===
     rulesChecked.layer3 = true;
-    
+
     // Rule 9 - Canonical form check
     if (canonicalSmiles && smiles !== canonicalSmiles) {
         warnings.push({
@@ -1764,7 +1772,7 @@ export const validatePolymerComprehensive = async (
             details: `Original: ${smiles}\nCanonical: ${canonicalSmiles}`
         });
     }
-    
+
     // Rule 10 - Allowed elements check
     const elementsCheck = checkAllowedElements(smiles);
     if (!elementsCheck.valid) {
@@ -1774,7 +1782,7 @@ export const validatePolymerComprehensive = async (
             details: `Forbidden elements found: ${elementsCheck.forbidden.join(', ')}`
         });
     }
-    
+
     // Rule 11 - Radicals and charges check
     const radicalChargeCheck = checkRadicalsAndCharges(smiles);
     if (radicalChargeCheck.hasCharges) {
@@ -1791,9 +1799,9 @@ export const validatePolymerComprehensive = async (
             details: "Radical species detected. These are typically unstable."
         });
     }
-    
+
     const polymerType = classifyPolymerType(molecules);
-    
+
     return {
         isValid: errors.length === 0,
         smiles,
@@ -1808,38 +1816,87 @@ export const validatePolymerComprehensive = async (
 };
 
 /**
- * API endpoint for property prediction (Tier 1 - heuristics)
- * Calls the backend /predict/tier-1 endpoint
+ * API endpoint for property prediction combining Tier 1 (heuristics) and Tier 2 (physics-based)
+ * Calls both /predict/tier-1 and /predict/tier-2 endpoints and averages results 50/50
+ * Both tiers return values in 0-10 scale
  */
 export const predictPropertiesFromBackend = async (
     smiles: string
-): Promise<{ success: boolean; properties?: Record<string, number>; error?: string }> => {
+): Promise<{ success: boolean; properties?: Record<string, number>; error?: string; tier1Only?: boolean }> => {
     try {
-        const response = await predictTier1(smiles);
-        
-        console.log('Raw API response:', JSON.stringify(response, null, 2));
-        
-        // Check if API returned success status (200 = success)
-        if (response.status !== 200 || !response.data) {
-            console.log('API status check failed:', { status: response.status, data: response.data });
+        // Call both Tier 1 and Tier 2 in parallel
+        const [tier1Response, tier2Response] = await Promise.allSettled([
+            predictTier1(smiles),
+            predictTier2(smiles)
+        ]);
+
+        console.log('Tier 1 response:', tier1Response);
+        console.log('Tier 2 response:', tier2Response);
+
+        // Extract Tier 1 data
+        let tier1Data: { strength: number; flexibility: number; degradability: number; sustainability: number; sas_score?: number } | null = null;
+        if (tier1Response.status === 'fulfilled' && tier1Response.value.status === 200 && tier1Response.value.data) {
+            tier1Data = tier1Response.value.data;
+        }
+
+        // Extract Tier 2 data
+        let tier2Data: { strength: number; flexibility: number; degradability: number; sustainability: number } | null = null;
+        if (tier2Response.status === 'fulfilled' && tier2Response.value.status === 200 && tier2Response.value.data) {
+            tier2Data = tier2Response.value.data as any;
+        }
+
+        // If neither succeeded, return error
+        if (!tier1Data && !tier2Data) {
+            const errorMsg = tier1Response.status === 'rejected'
+                ? tier1Response.reason?.message
+                : (tier1Response.value as any)?.error || 'Both prediction tiers failed';
             return {
                 success: false,
-                error: response.error || response.message || 'Prediction failed'
+                error: errorMsg
             };
         }
-        
-        // Map the TierOneAnalysis response to our expected format
-        // Backend returns values in 0-100 scale based on the API design
-        const data = response.data;
+
+        // Calculate composite scores (50/50 average if both available, otherwise use available tier)
+        let compositeProperties: Record<string, number>;
+        let tier1Only = false;
+
+        if (tier1Data && tier2Data) {
+            // Both available - average 50/50
+            compositeProperties = {
+                strength: (tier1Data.strength + tier2Data.strength) / 2,
+                flexibility: (tier1Data.flexibility + tier2Data.flexibility) / 2,
+                degradability: (tier1Data.degradability + tier2Data.degradability) / 2,
+                sustainability: (tier1Data.sustainability + tier2Data.sustainability) / 2,
+                sas_score: tier1Data.sas_score ?? 5 // SAS score only from Tier 1
+            };
+            console.log('Composite (50/50 Tier1+Tier2):', compositeProperties);
+        } else if (tier1Data) {
+            // Only Tier 1 available
+            compositeProperties = {
+                strength: tier1Data.strength,
+                flexibility: tier1Data.flexibility,
+                degradability: tier1Data.degradability,
+                sustainability: tier1Data.sustainability,
+                sas_score: tier1Data.sas_score ?? 5
+            };
+            tier1Only = true;
+            console.log('Using Tier 1 only:', compositeProperties);
+        } else {
+            // Only Tier 2 available
+            compositeProperties = {
+                strength: tier2Data!.strength,
+                flexibility: tier2Data!.flexibility,
+                degradability: tier2Data!.degradability,
+                sustainability: tier2Data!.sustainability,
+                sas_score: 5 // Default when only Tier 2
+            };
+            console.log('Using Tier 2 only:', compositeProperties);
+        }
+
         return {
             success: true,
-            properties: {
-                strength: data.strength,
-                flexibility: data.flexibility,
-                degradability: data.degradability,
-                sustainability: data.sustainability,
-                sas_score: data.sas_score
-            }
+            properties: compositeProperties,
+            tier1Only
         };
     } catch (error: any) {
         return {
@@ -1929,7 +1986,7 @@ export const parseSmilestoMolecules = async (
     try {
         const rdkit = await getRDKit();
         const mol = rdkit.get_mol(smiles);
-        
+
         if (!mol) {
             return {
                 success: false,
@@ -1937,19 +1994,19 @@ export const parseSmilestoMolecules = async (
                 error: 'Invalid SMILES: Could not parse molecule'
             };
         }
-        
+
         try {
             // Get Molblock which contains 2D coordinates
             const molblock = mol.get_molblock();
             const lines = molblock.split('\n');
-            
+
             // Parse counts line (4th line in Molfile V2000)
             // Format: aaabbblllfffcccsssxxxrrrpppiiimmmvvvvvv
             // aaa = number of atoms, bbb = number of bonds
             const countsLine = lines[3];
             const numAtoms = parseInt(countsLine.substring(0, 3).trim());
             const numBonds = parseInt(countsLine.substring(3, 6).trim());
-            
+
             if (numAtoms === 0) {
                 return {
                     success: false,
@@ -1957,10 +2014,10 @@ export const parseSmilestoMolecules = async (
                     error: 'No atoms found in molecule'
                 };
             }
-            
+
             // Scale factor for coordinates
             const scale = 2.5;
-            
+
             // Parse atom block (starts at line 5, 0-indexed line 4)
             const atoms: Array<{ x: number; y: number; z: number; symbol: string }> = [];
             for (let i = 0; i < numAtoms; i++) {
@@ -1972,7 +2029,7 @@ export const parseSmilestoMolecules = async (
                 const symbol = atomLine.substring(31, 34).trim();
                 atoms.push({ x, y, z, symbol });
             }
-            
+
             // Calculate center of mass for centering
             let sumX = 0, sumY = 0;
             for (const atom of atoms) {
@@ -1981,22 +2038,22 @@ export const parseSmilestoMolecules = async (
             }
             const centerX = sumX / atoms.length;
             const centerY = sumY / atoms.length;
-            
+
             // Create PlacedMolecule for each atom
             const molecules: PlacedMolecule[] = [];
             const atomIdMap = new Map<number, number>();
-            
+
             for (let i = 0; i < atoms.length; i++) {
                 const atom = atoms[i];
                 const element = atom.symbol || 'C';
                 const moleculeId = startId + i;
                 atomIdMap.set(i, moleculeId);
-                
+
                 // Center and scale coordinates, project onto XZ plane (Y=0 for ground)
                 const posX = (atom.x - centerX) * scale + centerOffset.x;
                 const posZ = (atom.y - centerY) * scale + centerOffset.z;
                 const posY = centerOffset.y;
-                
+
                 molecules.push({
                     id: moleculeId,
                     name: element,
@@ -2009,7 +2066,7 @@ export const parseSmilestoMolecules = async (
                     connections: []
                 });
             }
-            
+
             // Parse bond block
             let bondCount = 0;
             for (let i = 0; i < numBonds; i++) {
@@ -2018,14 +2075,14 @@ export const parseSmilestoMolecules = async (
                 // 111 = first atom, 222 = second atom, ttt = bond type
                 const atom1Idx = parseInt(bondLine.substring(0, 3).trim()) - 1; // 1-indexed to 0-indexed
                 const atom2Idx = parseInt(bondLine.substring(3, 6).trim()) - 1;
-                
+
                 const mol1Id = atomIdMap.get(atom1Idx);
                 const mol2Id = atomIdMap.get(atom2Idx);
-                
+
                 if (mol1Id !== undefined && mol2Id !== undefined) {
                     const mol1 = molecules.find(m => m.id === mol1Id);
                     const mol2 = molecules.find(m => m.id === mol2Id);
-                    
+
                     if (mol1 && mol2) {
                         if (!mol1.connections.includes(mol2Id)) {
                             mol1.connections.push(mol2Id);
@@ -2037,14 +2094,14 @@ export const parseSmilestoMolecules = async (
                     }
                 }
             }
-            
+
             return {
                 success: true,
                 molecules,
                 atomCount: numAtoms,
                 bondCount
             };
-            
+
         } finally {
             mol.delete();
         }
